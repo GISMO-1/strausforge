@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -7,6 +8,12 @@ from strausforge.cert import from_jsonl
 from strausforge.cli import app
 
 runner = CliRunner()
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE_RE.sub("", text)
 
 
 def test_check_command_pass() -> None:
@@ -177,4 +184,4 @@ def test_id_targets_rejects_non_positive_modulus(tmp_path: Path) -> None:
         ["id-targets", "--identity", str(identity_file), "--modulus", "0"],
     )
     assert result.exit_code != 0
-    assert "Expected --modulus > 0." in result.output
+    assert "Expected --modulus > 0." in _strip_ansi(result.output)

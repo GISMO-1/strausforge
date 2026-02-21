@@ -230,10 +230,22 @@ def id_verify_cmd(
         )
 
 
+def _validate_positive_modulus(value: int) -> int:
+    """Validate modulus option values for identity coverage commands."""
+    if value <= 0:
+        raise typer.BadParameter("Expected --modulus > 0.")
+    return value
+
+
 @app.command("id-targets")
 def id_targets_cmd(
     identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
-    modulus: int = typer.Option(..., "--modulus", help="Coverage modulus to analyze."),
+    modulus: int = typer.Option(
+        ...,
+        "--modulus",
+        help="Coverage modulus to analyze.",
+        callback=_validate_positive_modulus,
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output JSON summary."),
 ) -> None:
     """Report covered and uncovered residue classes for mining targets.
@@ -242,9 +254,6 @@ def id_targets_cmd(
         strausforge id-targets --identity data/identities.jsonl --modulus 24
         strausforge id-targets --identity data/identities.jsonl --modulus 24 --json
     """
-    if modulus <= 0:
-        raise typer.BadParameter("Expected --modulus > 0.")
-
     report = coverage_report(_load_identities(identity_file), modulus=modulus)
     if json_output:
         console.print(json.dumps(report, sort_keys=True))
