@@ -3,6 +3,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from strausforge.cert import from_jsonl
 from strausforge.cli import app
 from strausforge.loop import run_loop
 
@@ -53,12 +54,15 @@ def test_run_loop_returns_structured_report(tmp_path: Path) -> None:
     assert result["targets_used"] <= 2
     assert result["n_tested"] <= 6
 
-    certs_written = result["certs_written"]
+    certs_written = Path(result["certs_written"])
     assert certs_written == Path("data") / "certs_targets_m12.jsonl"
     assert certs_written.exists()
-    cert_lines = certs_written.read_text(encoding="utf-8").strip().splitlines()
+    cert_lines = [
+        line for line in certs_written.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
     assert cert_lines
-    assert all(line.strip() for line in cert_lines)
+    certs = [from_jsonl(line) for line in cert_lines]
+    assert all(cert.verified for cert in certs)
 
     identities_after = [
         line for line in identity_file.read_text(encoding="utf-8").splitlines() if line.strip()
@@ -98,3 +102,5 @@ def test_loop_cli_runs_and_reports(tmp_path: Path) -> None:
     assert certs_path.exists()
     lines = [line for line in certs_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert lines
+    certs = [from_jsonl(line) for line in lines]
+    assert all(cert.verified for cert in certs)
