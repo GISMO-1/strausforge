@@ -70,6 +70,7 @@ Mining is deterministic (not ML):
 - load verified certificates,
 - group by modulus/residue,
 - fit small template families (affine, quotient-linear, bilinear),
+- apply built-in family templates (including `odd4_family` for `n ≡ 5 (mod 8)`, i.e. part of `n ≡ 1 (mod 4)`),
 - verify candidates empirically with exact rationals,
 - then attempt symbolic verification with SymPy.
 
@@ -92,6 +93,13 @@ strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500
 ```
 
 
+Coverage check example:
+
+```bash
+strausforge id-targets --identity data/identities.jsonl --modulus 48
+```
+
+
 ## Autopilot Loop
 
 Use the loop command to run one deterministic end-to-end mining iteration:
@@ -99,7 +107,7 @@ Use the loop command to run one deterministic end-to-end mining iteration:
 2. generate deterministic target `n` values,
 3. certify those examples,
 4. mine identities from those certificates,
-5. append newly discovered identities,
+5. append newly discovered identities (including any built-in family templates that verify),
 6. recompute and print coverage delta.
 
 Example:

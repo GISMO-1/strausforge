@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from strausforge.cert import make_certificate, to_jsonl
+from strausforge.coverage import coverage_report
 from strausforge.erdos_straus import find_solution_fast
 from strausforge.mine import mine_identities
 
@@ -26,3 +27,15 @@ def test_mine_small_finds_symbolic_identity(tmp_path: Path) -> None:
     assert out_file.exists()
     assert len(identities) >= 1
     assert any("symbolic" in identity.notes for identity in identities)
+
+
+def test_mine_small_breaks_mod4_wall(tmp_path: Path) -> None:
+    certs_file = tmp_path / "certs.jsonl"
+    out_file = tmp_path / "identities.jsonl"
+    _write_fixture_certs(certs_file, end=260)
+
+    identities = mine_identities(certs_file, out_file, max_identities=30)
+    report = coverage_report(identities, modulus=16)
+
+    assert report["covered_pct"] > 75.0
+    assert any(residue % 4 == 1 for residue in report["covered_residues"])

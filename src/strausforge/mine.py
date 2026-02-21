@@ -112,6 +112,26 @@ def _make_name(modulus: int, residue: int, flavor: str, index: int) -> str:
     return f"m{modulus}_r{residue}_{flavor}{index}"
 
 
+def _family_templates() -> list[Identity]:
+    """Return deterministic built-in identity families.
+
+    The ``odd4_family`` template handles ``n ≡ 5 (mod 8)``, which is a
+    previously uncovered subset of the ``n ≡ 1 (mod 4)`` class.
+    """
+    return [
+        Identity(
+            name="odd4_family_m8_r5",
+            modulus=8,
+            residues=[5],
+            x_form="(n+3)/4",
+            y_form="n*(n+3)/4",
+            z_form="n*(n+3)/8",
+            conditions=[],
+            notes="family=odd4; symbolic",
+        )
+    ]
+
+
 def mine_identities(
     certs_path: Path,
     out_path: Path,
@@ -127,6 +147,28 @@ def mine_identities(
 
     identities: list[Identity] = []
     seen: set[tuple[int, tuple[int, ...], str, str, str, tuple[str, ...]]] = set()
+
+    for template in _family_templates():
+        empirical = verify_identity(template, n_min=2, n_max=5000)
+        if empirical["tested"] == 0 or empirical["failed"] > 0:
+            continue
+        if not verify_identity_symbolic(template):
+            continue
+
+        dedupe_key = (
+            template.modulus,
+            tuple(template.residues),
+            template.x_form,
+            template.y_form,
+            template.z_form,
+            tuple(template.conditions),
+        )
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        identities.append(template)
+        if len(identities) >= max_identities:
+            break
 
     for modulus in MODULI:
         for residue in range(modulus):
