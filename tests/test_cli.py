@@ -1,3 +1,5 @@
+import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -6,6 +8,12 @@ from strausforge.cert import from_jsonl
 from strausforge.cli import app
 
 runner = CliRunner()
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE_RE.sub("", text)
 
 
 def test_check_command_pass() -> None:
@@ -113,3 +121,67 @@ def test_mine_and_identity_commands(tmp_path: Path) -> None:
     )
     assert id_verify_result.exit_code == 0
     assert "tested=" in id_verify_result.stdout
+
+
+def test_id_targets_command_text_and_json(tmp_path: Path) -> None:
+    identity_file = tmp_path / "identities.jsonl"
+    identity_file.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "conditions": [],
+                        "modulus": 2,
+                        "name": "seed_even",
+                        "notes": "",
+                        "residues": [0],
+                        "x_form": "n/2",
+                        "y_form": "n",
+                        "z_form": "n",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "conditions": [],
+                        "modulus": 4,
+                        "name": "seed_mod4_3",
+                        "notes": "",
+                        "residues": [3],
+                        "x_form": "(n+1)/4",
+                        "y_form": "n*(n+1)/2",
+                        "z_form": "n*(n+1)/2",
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    text_result = runner.invoke(
+        app,
+        ["id-targets", "--identity", str(identity_file), "--modulus", "8"],
+    )
+    assert text_result.exit_code == 0
+    assert "covered=6/8 (75.00%)" in text_result.stdout
+    assert "uncovered residues: [1, 5]" in text_result.stdout
+
+    json_result = runner.invoke(
+        app,
+        ["id-targets", "--identity", str(identity_file), "--modulus", "8", "--json"],
+    )
+    assert json_result.exit_code == 0
+    assert '"covered_count": 6' in json_result.stdout
+    assert '"uncovered_residues": [1, 5]' in json_result.stdout
+
+
+def test_id_targets_rejects_non_positive_modulus(tmp_path: Path) -> None:
+    identity_file = tmp_path / "identities.jsonl"
+    identity_file.write_text("", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["id-targets", "--identity", str(identity_file), "--modulus", "0"],
+    )
+    assert result.exit_code != 0
+    assert "Expected --modulus > 0." in _strip_ansi(result.output)

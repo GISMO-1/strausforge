@@ -12,6 +12,7 @@ import typer
 from rich.console import Console
 
 from .cert import Certificate, from_jsonl, make_certificate, to_jsonl
+from .coverage import coverage_report
 from .erdos_straus import check_identity, find_solution, find_solution_fast
 from .identities import Identity, eval_identity, identity_from_jsonl, verify_identity
 from .mine import mine_identities
@@ -227,6 +228,43 @@ def id_verify_cmd(
             f"identity={identity.name}, tested={stats['tested']}, "
             f"passed={stats['passed']}, failed={stats['failed']}"
         )
+
+
+def _validate_positive_modulus(value: int) -> int:
+    """Validate modulus option values for identity coverage commands."""
+    if value <= 0:
+        raise typer.BadParameter("Expected --modulus > 0.")
+    return value
+
+
+@app.command("id-targets")
+def id_targets_cmd(
+    identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
+    modulus: int = typer.Option(
+        ...,
+        "--modulus",
+        help="Coverage modulus to analyze.",
+        callback=_validate_positive_modulus,
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON summary."),
+) -> None:
+    """Report covered and uncovered residue classes for mining targets.
+
+    Examples:
+        strausforge id-targets --identity data/identities.jsonl --modulus 24
+        strausforge id-targets --identity data/identities.jsonl --modulus 24 --json
+    """
+    report = coverage_report(_load_identities(identity_file), modulus=modulus)
+    if json_output:
+        console.print(json.dumps(report, sort_keys=True))
+        return
+
+    console.print(
+        f"coverage modulus={report['modulus']}: "
+        f"covered={report['covered_count']}/{report['total_residues']} "
+        f"({report['covered_pct']:.2f}%)"
+    )
+    console.print(f"uncovered residues: {report['uncovered_residues']}")
 
 
 def _load_certs(path: Path) -> list[Certificate]:
