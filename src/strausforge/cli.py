@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from fractions import Fraction
+from pathlib import Path
+from time import perf_counter
 
 import typer
 from rich.console import Console
 
-from .erdos_straus import check_identity, find_solution
+from .cert import Certificate, from_jsonl, make_certificate, to_jsonl
+from .erdos_straus import check_identity, find_solution, find_solution_fast
 
-app = typer.Typer(help="Baseline search/verification tool for the Erdős–Straus conjecture.")
+app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
 
 
@@ -66,6 +70,107 @@ def search(
 
     for value in range(start, end + 1):
         _print_single(n=value, json_output=json_output)
+
+
+@app.command()
+def certify(
+    start: int = typer.Option(..., "--start", help="Range start (inclusive)."),
+    end: int = typer.Option(..., "--end", help="Range end (inclusive)."),
+    out: Path = typer.Option(..., "--out", help="Output JSONL certificate file."),
+) -> None:
+    """Generate machine-checkable certificates for a range.
+
+    Examples:
+        strausforge certify --start 2 --end 100 --out certs.jsonl
+    """
+    if start > end:
+        raise typer.BadParameter("Expected start <= end.")
+
+    certs: list[Certificate] = []
+    for n in range(start, end + 1):
+        started = perf_counter()
+        solution = find_solution_fast(n)
+        elapsed_ms = (perf_counter() - started) * 1000.0
+
+        if solution is None:
+            cert = make_certificate(
+                n=n,
+                x=0,
+                y=0,
+                z=0,
+                method="search_v1",
+                elapsed_ms=elapsed_ms,
+            )
+        else:
+            x, y, z = solution
+            cert = make_certificate(
+                n=n,
+                x=x,
+                y=y,
+                z=z,
+                method="search_v1",
+                elapsed_ms=elapsed_ms,
+            )
+        certs.append(cert)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as handle:
+        for cert in certs:
+            handle.write(to_jsonl(cert) + "\n")
+
+    solved = sum(1 for cert in certs if cert.verified)
+    unsolved = len(certs) - solved
+    fastest = min(cert.elapsed_ms for cert in certs)
+    slowest = max(cert.elapsed_ms for cert in certs)
+
+    console.print(
+        f"summary: solved={solved}, unsolved={unsolved}, "
+        f"fastest_ms={fastest:.3f}, slowest_ms={slowest:.3f}"
+    )
+
+
+@app.command(name="stats")
+def stats_cmd(
+    in_file: Path = typer.Option(..., "--in", help="Input JSONL certificate file."),
+) -> None:
+    """Print coverage and timing statistics from certificate JSONL.
+
+    Examples:
+        strausforge stats --in certs.jsonl
+    """
+    certs = _load_certs(in_file)
+    if not certs:
+        raise typer.BadParameter("No certificate lines found in input file.")
+
+    for mod_key in ("n_mod_4", "n_mod_12", "n_mod_24"):
+        totals: dict[int, int] = defaultdict(int)
+        solved: dict[int, int] = defaultdict(int)
+        for cert in certs:
+            cls = cert.residue[mod_key]
+            totals[cls] += 1
+            if cert.verified:
+                solved[cls] += 1
+
+        console.print(f"coverage {mod_key}:")
+        for cls in sorted(totals):
+            console.print(f"  class={cls:>2}: solved={solved[cls]}, total={totals[cls]}")
+
+    console.print("top 10 slowest n values:")
+    for cert in sorted(certs, key=lambda item: item.elapsed_ms, reverse=True)[:10]:
+        console.print(
+            f"  n={cert.n}, elapsed_ms={cert.elapsed_ms:.3f}, verified={str(cert.verified).lower()}"
+        )
+
+
+def _load_certs(path: Path) -> list[Certificate]:
+    certs: list[Certificate] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            certs.append(from_jsonl(stripped))
+    return certs
 
 
 def _print_single(n: int, json_output: bool) -> None:
