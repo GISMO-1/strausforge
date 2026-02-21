@@ -91,6 +91,28 @@ Empirically verify all stored identities over a range:
 strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500
 ```
 
+
+## Autopilot Loop
+
+Use the loop command to run one deterministic end-to-end mining iteration:
+1. compute uncovered residues at a chosen modulus,
+2. generate deterministic target `n` values,
+3. certify those examples,
+4. mine identities from those certificates,
+5. append newly discovered identities,
+6. recompute and print coverage delta.
+
+Example:
+
+```bash
+strausforge loop --identity data/identities.jsonl --modulus 24 --max-targets 4 --max-per-target 3 --max-new-identities 10
+```
+
+What to expect:
+- The command prints a before/after coverage summary and a delta line.
+- Certificates are written to `data/certs_targets_m<M>.jsonl`.
+- Some runs may add zero identities (exit code 1 in that case); increase range pressure via larger `--max-targets` and `--max-per-target`.
+
 ## Scope
 
 This project provides a clean foundation for computational experimentation and symbolic verification around Erdős–Straus instances. It does **not** claim a proof or disproof of the conjecture.

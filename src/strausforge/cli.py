@@ -15,6 +15,7 @@ from .cert import Certificate, from_jsonl, make_certificate, to_jsonl
 from .coverage import coverage_report
 from .erdos_straus import check_identity, find_solution, find_solution_fast
 from .identities import Identity, eval_identity, identity_from_jsonl, verify_identity
+from .loop import run_loop
 from .mine import mine_identities
 
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
@@ -265,6 +266,86 @@ def id_targets_cmd(
         f"({report['covered_pct']:.2f}%)"
     )
     console.print(f"uncovered residues: {report['uncovered_residues']}")
+
+
+@app.command("loop")
+def loop_cmd(
+    identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
+    modulus: int = typer.Option(
+        ...,
+        "--modulus",
+        help="Coverage modulus to analyze.",
+        callback=_validate_positive_modulus,
+    ),
+    max_targets: int = typer.Option(
+        5, "--max-targets", help="Maximum uncovered residues to target."
+    ),
+    max_per_target: int = typer.Option(
+        5,
+        "--max-per-target",
+        help="Maximum n examples generated per target residue.",
+    ),
+    max_new_identities: int = typer.Option(
+        10,
+        "--max-new-identities",
+        help="Maximum identities to mine in this loop.",
+    ),
+) -> None:
+    """Run one end-to-end deterministic loop for mining and coverage updates.
+
+    Examples:
+        strausforge loop --identity data/identities.jsonl --modulus 24
+        strausforge loop --identity data/identities.jsonl --modulus 24 \
+            --max-targets 4 --max-per-target 3
+    """
+    existing = _load_identities(identity_file)
+    before = coverage_report(existing, modulus=modulus)
+    console.print(
+        f"before: covered={before['covered_count']}/{before['total_residues']} "
+        f"({before['covered_pct']:.2f}%), uncovered={before['uncovered_count']}"
+    )
+
+    uncovered = before["uncovered_residues"]
+    planned_targets = min(len(uncovered), max_targets)
+    console.print(
+        "run plan: "
+        f"uncovered_residues={len(uncovered)}, targets={planned_targets}, "
+        f"max_per_target={max_per_target}, max_new_identities={max_new_identities}"
+    )
+
+    result = run_loop(
+        identity_path=identity_file,
+        modulus=modulus,
+        max_targets=max_targets,
+        max_per_target=max_per_target,
+        max_new_identities=max_new_identities,
+    )
+
+    after = result["after"]
+    before_count = before["covered_count"]
+    after_count = after["covered_count"]
+    delta_count = int(after_count) - int(before_count)
+    new_covered = sorted(set(after["covered_residues"]) - set(before["covered_residues"]))
+    console.print(
+        f"after: covered={after['covered_count']}/{after['total_residues']} "
+        f"({after['covered_pct']:.2f}%), uncovered={after['uncovered_count']}"
+    )
+    console.print(
+        "delta: "
+        f"covered {before['covered_count']} -> {after['covered_count']} ({delta_count:+d}), "
+        f"uncovered {before['uncovered_count']} -> {after['uncovered_count']}, "
+        f"covered_pct {before['covered_pct']:.2f}% -> {after['covered_pct']:.2f}%"
+    )
+    if new_covered:
+        console.print(f"newly covered residues: {new_covered}")
+
+    console.print(
+        f"loop result: targets_used={result['targets_used']}, n_tested={result['n_tested']}, "
+        f"certs={result['certs_written']}, identities_added={result['identities_added']}"
+    )
+
+    if result["identities_added"] == 0:
+        raise typer.Exit(code=1)
 
 
 def _load_certs(path: Path) -> list[Certificate]:
