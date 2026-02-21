@@ -65,3 +65,51 @@ def test_stats_reads_certificates(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "coverage n_mod_4:" in result.stdout
     assert "top 10 slowest n values:" in result.stdout
+
+
+def test_mine_and_identity_commands(tmp_path: Path) -> None:
+    certs_file = tmp_path / "certs.jsonl"
+    identities_file = tmp_path / "identities.jsonl"
+
+    certify_result = runner.invoke(
+        app,
+        ["certify", "--start", "2", "--end", "120", "--out", str(certs_file)],
+    )
+    assert certify_result.exit_code == 0
+
+    mine_result = runner.invoke(
+        app,
+        [
+            "mine",
+            "--in",
+            str(certs_file),
+            "--out",
+            str(identities_file),
+            "--max-identities",
+            "10",
+        ],
+    )
+    assert mine_result.exit_code == 0
+    assert "identities_found=" in mine_result.stdout
+
+    id_check_result = runner.invoke(
+        app,
+        ["id-check", "--identity", str(identities_file), "--n", "8"],
+    )
+    assert id_check_result.exit_code == 0
+    assert "identity=" in id_check_result.stdout
+
+    id_verify_result = runner.invoke(
+        app,
+        [
+            "id-verify",
+            "--identity",
+            str(identities_file),
+            "--n-min",
+            "2",
+            "--n-max",
+            "100",
+        ],
+    )
+    assert id_verify_result.exit_code == 0
+    assert "tested=" in id_verify_result.stdout
