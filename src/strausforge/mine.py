@@ -117,6 +117,9 @@ def _family_templates() -> list[Identity]:
 
     The ``odd4_family`` template handles ``n ≡ 5 (mod 8)``, which is a
     previously uncovered subset of the ``n ≡ 1 (mod 4)`` class.
+
+    The ``odd4_mod12_r9`` template adds another odd-residue construction for
+    ``n ≡ 9 (mod 12)`` (equivalently ``n ≡ 1 (mod 4)`` and ``n ≡ 0 (mod 3)``).
     """
     return [
         Identity(
@@ -128,7 +131,17 @@ def _family_templates() -> list[Identity]:
             z_form="n*(n+3)/8",
             conditions=[],
             notes="family=odd4; symbolic",
-        )
+        ),
+        Identity(
+            name="odd4_mod12_r9",
+            modulus=12,
+            residues=[9],
+            x_form="(n+3)/4",
+            y_form="n*(n+3)/6",
+            z_form="n*(n+3)/6",
+            conditions=[],
+            notes="family=odd4; symbolic",
+        ),
     ]
 
 

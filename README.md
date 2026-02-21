@@ -70,7 +70,7 @@ Mining is deterministic (not ML):
 - load verified certificates,
 - group by modulus/residue,
 - fit small template families (affine, quotient-linear, bilinear),
-- apply built-in family templates (including `odd4_family` for `n ≡ 5 (mod 8)`, i.e. part of `n ≡ 1 (mod 4)`),
+- apply built-in family templates (including `odd4_family` for `n ≡ 5 (mod 8)` and `odd4_mod12_r9` for `n ≡ 9 (mod 12)`, both within `n ≡ 1 (mod 4)`),
 - verify candidates empirically with exact rationals,
 - then attempt symbolic verification with SymPy.
 
