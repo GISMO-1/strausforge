@@ -68,7 +68,7 @@ def run_loop(
 
     identities = _load_identities(identity_path)
     before = coverage_report(identities, modulus=modulus)
-    uncovered = list(before["uncovered_residues"])
+    uncovered = sorted(before["uncovered_residues"])
     targets = uncovered[:max_targets]
 
     certs_path = Path("data") / f"certs_targets_m{modulus}.jsonl"
@@ -118,7 +118,7 @@ def run_loop(
         "after": after,
         "targets_used": len(targets),
         "n_tested": len(n_examples),
-        "certs_written": certs_path,
+        "certs_written": str(certs_path),
         "identities_added": len(new_identities),
         "added_identity_names": [identity.name for identity in new_identities],
     }
