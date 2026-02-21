@@ -13,6 +13,8 @@ from rich.console import Console
 
 from .cert import Certificate, from_jsonl, make_certificate, to_jsonl
 from .erdos_straus import check_identity, find_solution, find_solution_fast
+from .identities import Identity, eval_identity, identity_from_jsonl, verify_identity
+from .mine import mine_identities
 
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
@@ -162,6 +164,71 @@ def stats_cmd(
         )
 
 
+@app.command("mine")
+def mine_cmd(
+    in_file: Path = typer.Option(..., "--in", help="Input certificate JSONL."),
+    out_file: Path = typer.Option(..., "--out", help="Output identities JSONL."),
+    max_identities: int = typer.Option(50, "--max-identities", help="Maximum identities."),
+) -> None:
+    """Mine deterministic residue-class identities from certificates.
+
+    Examples:
+        strausforge mine --in certs.jsonl --out data/identities.jsonl
+        strausforge mine --in certs.jsonl --out data/identities.jsonl --max-identities 25
+    """
+    identities = mine_identities(in_file, out_file, max_identities=max_identities)
+    symbolic = sum(1 for identity in identities if "symbolic" in identity.notes)
+    empirical_only = sum(1 for identity in identities if "empirical-only" in identity.notes)
+    console.print(
+        f"summary: identities_found={len(identities)}, "
+        f"symbolic_verified={symbolic}, empirical_only={empirical_only}"
+    )
+
+
+@app.command("id-check")
+def id_check_cmd(
+    identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
+    n: int = typer.Option(..., "--n", help="Target n."),
+) -> None:
+    """Find the first identity that applies to ``n`` and print ``(x, y, z)``.
+
+    Examples:
+        strausforge id-check --identity data/identities.jsonl --n 35
+    """
+    for identity in _load_identities(identity_file):
+        triple = eval_identity(identity, n)
+        if triple is None:
+            continue
+        x, y, z = triple
+        console.print(f"identity={identity.name}, n={n}, x={x}, y={y}, z={z}")
+        return
+
+    console.print(f"no identity applies at n={n}")
+    raise typer.Exit(code=1)
+
+
+@app.command("id-verify")
+def id_verify_cmd(
+    identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
+    n_min: int = typer.Option(..., "--n-min", help="Minimum n."),
+    n_max: int = typer.Option(..., "--n-max", help="Maximum n."),
+) -> None:
+    """Empirically verify each stored identity over a range.
+
+    Examples:
+        strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500
+    """
+    if n_min > n_max:
+        raise typer.BadParameter("Expected --n-min <= --n-max.")
+
+    for identity in _load_identities(identity_file):
+        stats = verify_identity(identity, n_min=n_min, n_max=n_max)
+        console.print(
+            f"identity={identity.name}, tested={stats['tested']}, "
+            f"passed={stats['passed']}, failed={stats['failed']}"
+        )
+
+
 def _load_certs(path: Path) -> list[Certificate]:
     certs: list[Certificate] = []
     with path.open("r", encoding="utf-8") as handle:
@@ -171,6 +238,17 @@ def _load_certs(path: Path) -> list[Certificate]:
                 continue
             certs.append(from_jsonl(stripped))
     return certs
+
+
+def _load_identities(path: Path) -> list[Identity]:
+    identities: list[Identity] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            identities.append(identity_from_jsonl(stripped))
+    return identities
 
 
 def _print_single(n: int, json_output: bool) -> None:

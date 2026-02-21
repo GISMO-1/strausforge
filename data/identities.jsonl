@@ -1,0 +1,2 @@
+{"conditions": [], "modulus": 2, "name": "seed_even", "notes": "seed; symbolic", "residues": [0], "x_form": "n/2", "y_form": "n", "z_form": "n"}
+{"conditions": [], "modulus": 4, "name": "seed_mod4_3", "notes": "seed; symbolic", "residues": [3], "x_form": "(n+1)/4", "y_form": "n*(n+1)/2", "z_form": "n*(n+1)/2"}
