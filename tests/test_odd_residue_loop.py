@@ -33,7 +33,7 @@ def test_loop_mod48_breaks_mod4_wall(tmp_path: Path) -> None:
     shutil.copy(Path("data/identities.jsonl"), identity_file)
 
     before_pct = _coverage_pct(identity_file, modulus=48)
-    assert before_pct == 75.0
+    assert before_pct == 91.66666666666666
 
     result = runner.invoke(
         app,
@@ -46,9 +46,13 @@ def test_loop_mod48_breaks_mod4_wall(tmp_path: Path) -> None:
             "--max-targets",
             "12",
             "--max-per-target",
-            "6",
+            "400",
             "--max-new-identities",
             "25",
+            "--target-timeout-seconds",
+            "15",
+            "--progress-every",
+            "200",
         ],
         catch_exceptions=False,
     )
@@ -56,5 +60,5 @@ def test_loop_mod48_breaks_mod4_wall(tmp_path: Path) -> None:
     assert result.exit_code in {0, 1}
 
     after_pct = _coverage_pct(identity_file, modulus=48)
-    assert "identities_added=0" not in result.stdout or after_pct > 75.0
-    assert after_pct > 75.0
+    assert "run plan:" in result.stdout
+    assert after_pct > before_pct

@@ -50,9 +50,13 @@ def test_run_loop_returns_structured_report(tmp_path: Path) -> None:
         "certs_written",
         "identities_added",
         "added_identity_names",
+        "target_counts",
+        "timed_out_targets",
     }
     assert result["targets_used"] <= 2
     assert result["n_tested"] <= 6
+    assert isinstance(result["target_counts"], dict)
+    assert isinstance(result["timed_out_targets"], list)
 
     certs_written = Path(result["certs_written"])
     assert certs_written == Path("data") / "certs_targets_m12.jsonl"

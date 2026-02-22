@@ -290,6 +290,16 @@ def loop_cmd(
         "--max-new-identities",
         help="Maximum identities to mine in this loop.",
     ),
+    target_timeout_seconds: float = typer.Option(
+        30.0,
+        "--target-timeout-seconds",
+        help="Per-target generation timeout in seconds.",
+    ),
+    progress_every: int = typer.Option(
+        200,
+        "--progress-every",
+        help="Print per-target progress every N generated examples.",
+    ),
 ) -> None:
     """Run one end-to-end deterministic loop for mining and coverage updates.
 
@@ -297,6 +307,8 @@ def loop_cmd(
         strausforge loop --identity data/identities.jsonl --modulus 24
         strausforge loop --identity data/identities.jsonl --modulus 24 \
             --max-targets 4 --max-per-target 3
+        strausforge loop --identity data/identities.jsonl --modulus 48 \
+            --max-targets 12 --max-per-target 400 --target-timeout-seconds 15
     """
     existing = _load_identities(identity_file)
     before = coverage_report(existing, modulus=modulus)
@@ -313,12 +325,18 @@ def loop_cmd(
         f"max_per_target={max_per_target}, max_new_identities={max_new_identities}"
     )
 
+    def _progress(message: str) -> None:
+        console.print(f"progress: {message}")
+
     result = run_loop(
         identity_path=identity_file,
         modulus=modulus,
         max_targets=max_targets,
         max_per_target=max_per_target,
         max_new_identities=max_new_identities,
+        target_timeout_seconds=target_timeout_seconds,
+        progress_every=progress_every,
+        progress_callback=_progress,
     )
 
     after = result["after"]
@@ -343,6 +361,8 @@ def loop_cmd(
         f"loop result: targets_used={result['targets_used']}, n_tested={result['n_tested']}, "
         f"certs={result['certs_written']}, identities_added={result['identities_added']}"
     )
+    if result["timed_out_targets"]:
+        console.print(f"timed out targets: {result['timed_out_targets']}")
 
     if result["identities_added"] == 0:
         raise typer.Exit(code=1)

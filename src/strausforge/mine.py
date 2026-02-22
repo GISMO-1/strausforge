@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from multiprocessing import Process, Queue
 from pathlib import Path
 
 from .cert import Certificate, from_jsonl
@@ -145,6 +146,65 @@ def _family_templates() -> list[Identity]:
     ]
 
 
+def _mod8_r1_candidates() -> list[Identity]:
+    """Return deterministic candidate identities targeting ``n ≡ 1 (mod 8)``."""
+    candidates: list[Identity] = []
+    offsets = (-7, 1, 7, 15)
+    index = 0
+    for a in offsets:
+        # Candidate family 1: y and z share the same bilinear seed.
+        index += 1
+        candidates.append(
+            Identity(
+                name=f"mod8_r1_a{a}_c4_d24_v{index}",
+                modulus=24,
+                residues=[17],
+                x_form=f"(n{a:+d})/4",
+                y_form=f"n*(n{a:+d})/4",
+                z_form=f"n*(n{a:+d})/24",
+                conditions=[],
+                notes="family=mod8_r1; empirical",
+            )
+        )
+
+        # Candidate family 2: asymmetric y/z shape with an extra factor in z.
+        for b in (-7, -3, 1, 5):
+            index += 1
+            candidates.append(
+                Identity(
+                    name=f"mod8_r1_a{a}_b{b}_c8_d24_v{index}",
+                    modulus=24,
+                    residues=[17],
+                    x_form=f"(n{a:+d})/8",
+                    y_form=f"n*(n{a:+d})/8",
+                    z_form=f"n*(n{a:+d})*(n{b:+d})/24",
+                    conditions=[],
+                    notes="family=mod8_r1; empirical",
+                )
+            )
+
+    return candidates
+
+
+def _symbolic_worker(identity: Identity, queue: Queue) -> None:
+    queue.put(verify_identity_symbolic(identity))
+
+
+def _verify_symbolic_with_timeout(identity: Identity, timeout_seconds: float) -> bool | None:
+    """Return symbolic verification result, or ``None`` if timed out."""
+    queue: Queue = Queue()
+    process = Process(target=_symbolic_worker, args=(identity, queue))
+    process.start()
+    process.join(timeout_seconds)
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        return None
+    if queue.empty():
+        return False
+    return bool(queue.get())
+
+
 def mine_identities(
     certs_path: Path,
     out_path: Path,
@@ -165,7 +225,7 @@ def mine_identities(
         empirical = verify_identity(template, n_min=2, n_max=5000)
         if empirical["tested"] == 0 or empirical["failed"] > 0:
             continue
-        if not verify_identity_symbolic(template):
+        if _verify_symbolic_with_timeout(template, timeout_seconds=2.0) is not True:
             continue
 
         dedupe_key = (
@@ -180,6 +240,34 @@ def mine_identities(
             continue
         seen.add(dedupe_key)
         identities.append(template)
+        if len(identities) >= max_identities:
+            break
+
+    for candidate in _mod8_r1_candidates():
+        empirical = verify_identity(candidate, n_min=2, n_max=1200)
+        if empirical["tested"] == 0 or empirical["failed"] > 0:
+            continue
+
+        symbolic = _verify_symbolic_with_timeout(candidate, timeout_seconds=2.0)
+        if symbolic is True:
+            candidate.notes = "family=mod8_r1; symbolic"
+        elif symbolic is None:
+            candidate.notes = "family=mod8_r1; empirical; symbolic_timeout"
+        else:
+            continue
+
+        dedupe_key = (
+            candidate.modulus,
+            tuple(candidate.residues),
+            candidate.x_form,
+            candidate.y_form,
+            candidate.z_form,
+            tuple(candidate.conditions),
+        )
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        identities.append(candidate)
         if len(identities) >= max_identities:
             break
 
@@ -209,8 +297,14 @@ def mine_identities(
             if empirical["tested"] == 0 or empirical["failed"] > 0:
                 continue
 
-            symbolic_ok = verify_identity_symbolic(candidate)
-            notes = "mined; symbolic" if symbolic_ok else "mined; empirical-only"
+            symbolic = _verify_symbolic_with_timeout(candidate, timeout_seconds=2.0)
+            notes = (
+                "mined; symbolic"
+                if symbolic is True
+                else "mined; empirical-only; symbolic_timeout"
+                if symbolic is None
+                else "mined; empirical-only"
+            )
             candidate = Identity(
                 name=_make_name(
                     modulus,
