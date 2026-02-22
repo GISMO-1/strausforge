@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from time import monotonic
 
 from .cert import make_certificate, to_jsonl
 from .coverage import coverage_report
@@ -56,6 +58,9 @@ def run_loop(
     max_targets: int,
     max_per_target: int,
     max_new_identities: int,
+    target_timeout_seconds: float = 30.0,
+    progress_every: int = 200,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     """Run one deterministic iterative coverage-improvement loop.
 
@@ -75,19 +80,50 @@ def run_loop(
     certs_path.parent.mkdir(parents=True, exist_ok=True)
 
     n_examples: list[int] = []
-    for residue in targets:
-        n_examples.extend(_target_examples(modulus, residue, max_per_target))
-    n_examples = sorted(set(n_examples))
-
+    target_counts: dict[int, int] = {}
+    target_timed_out: list[int] = []
     with certs_path.open("w", encoding="utf-8") as handle:
-        for n in n_examples:
-            solution = find_solution_fast(n)
-            if solution is None:
-                cert = make_certificate(n=n, x=0, y=0, z=0, method="loop_v1", elapsed_ms=0.0)
-            else:
-                x, y, z = solution
-                cert = make_certificate(n=n, x=x, y=y, z=z, method="loop_v1", elapsed_ms=0.0)
-            handle.write(to_jsonl(cert) + "\n")
+        for residue in targets:
+            value = residue if residue > 0 else modulus
+            while value < 2:
+                value += modulus
+
+            started = monotonic()
+            attempts = 0
+            while attempts < max_per_target:
+                if monotonic() - started >= target_timeout_seconds:
+                    target_timed_out.append(residue)
+                    break
+
+                solution = find_solution_fast(value)
+                if solution is None:
+                    cert = make_certificate(
+                        n=value, x=0, y=0, z=0, method="loop_v1", elapsed_ms=0.0
+                    )
+                else:
+                    x, y, z = solution
+                    cert = make_certificate(
+                        n=value, x=x, y=y, z=z, method="loop_v1", elapsed_ms=0.0
+                    )
+                handle.write(to_jsonl(cert) + "\n")
+
+                n_examples.append(value)
+                attempts += 1
+                if progress_callback is not None and attempts % max(progress_every, 1) == 0:
+                    progress_callback(
+                        f"target residue={residue}: attempted={attempts}/{max_per_target}"
+                    )
+
+                value += modulus
+
+            target_counts[residue] = attempts
+            if progress_callback is not None:
+                suffix = " (timeout)" if residue in target_timed_out else ""
+                progress_callback(
+                    f"target residue={residue}: attempted={attempts}/{max_per_target}{suffix}"
+                )
+
+    n_examples = sorted(set(n_examples))
 
     mined_path = identity_path.parent / f".{identity_path.name}.loop_mined.tmp"
     mined_identities = mine_identities(certs_path, mined_path, max_identities=max_new_identities)
@@ -121,4 +157,6 @@ def run_loop(
         "certs_written": str(certs_path),
         "identities_added": len(new_identities),
         "added_identity_names": [identity.name for identity in new_identities],
+        "target_counts": target_counts,
+        "timed_out_targets": target_timed_out,
     }
