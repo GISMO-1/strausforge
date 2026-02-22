@@ -1,2 +1,4 @@
 {"conditions": [], "modulus": 2, "name": "seed_even", "notes": "seed; symbolic", "residues": [0], "x_form": "n/2", "y_form": "n", "z_form": "n"}
 {"conditions": [], "modulus": 4, "name": "seed_mod4_3", "notes": "seed; symbolic", "residues": [3], "x_form": "(n+1)/4", "y_form": "n*(n+1)/2", "z_form": "n*(n+1)/2"}
+{"conditions": [], "modulus": 8, "name": "odd4_family_m8_r5", "notes": "family=odd4; symbolic", "residues": [5], "x_form": "(n+3)/4", "y_form": "n*(n+3)/4", "z_form": "n*(n+3)/8"}
+{"conditions": [], "modulus": 12, "name": "odd4_mod12_r9", "notes": "family=odd4; symbolic", "residues": [9], "x_form": "(n+3)/4", "y_form": "n*(n+3)/6", "z_form": "n*(n+3)/6"}
