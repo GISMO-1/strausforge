@@ -9,7 +9,7 @@ from typing import Any
 
 import sympy
 
-from .erdos_straus import check_identity
+from .erdos_straus import check_identity, find_solution_fast
 
 
 @dataclass(slots=True)
@@ -69,37 +69,53 @@ def _ceil_reciprocal(value: Fraction) -> int:
     return (value.denominator + value.numerator - 1) // value.numerator
 
 
-def _eval_procedural_identity(identity: Identity, n_value: int) -> tuple[int, int, int] | None:
+def _eval_procedural_identity(identity: Identity, n_value: int) -> tuple[int, int, int]:
     if identity.procedural_params is None:
-        return None
+        raise ValueError(f"Procedural identity {identity.name} has no procedural_params.")
 
     anchor = str(identity.procedural_params.get("anchor", "(n+5)//4"))
     if anchor != "(n+5)//4":
-        return None
+        raise ValueError(f"Unsupported anchor expression for procedural identity {identity.name}.")
 
-    window = int(identity.procedural_params.get("window", 8))
-    t_max = int(identity.procedural_params.get("t_max", 256))
-    if window < 0 or t_max < 0:
-        return None
+    initial_window = int(identity.procedural_params.get("window", 8))
+    initial_t_max = int(identity.procedural_params.get("t_max", 256))
+    if initial_window < 0 or initial_t_max < 0:
+        raise ValueError(f"Procedural parameters must be non-negative for {identity.name}.")
 
     x0 = (n_value + 5) // 4
     target = Fraction(4, n_value)
-    for x_value in range(x0 - window, x0 + window + 1):
-        if x_value < 2 or Fraction(1, x_value) >= target:
-            continue
-        remainder = target - Fraction(1, x_value)
-        y_start = _ceil_reciprocal(remainder)
-        for delta in range(t_max + 1):
-            y_value = y_start + delta
-            if y_value < 2:
+
+    attempts: list[tuple[int, int]] = [(initial_window, initial_t_max)]
+    if initial_window < 64:
+        attempts.append((64, initial_t_max))
+    if initial_t_max < 4096:
+        attempts.append((max(initial_window, 64), 4096))
+
+    for window, t_max in attempts:
+        for x_value in range(x0 - window, x0 + window + 1):
+            if x_value < 2 or Fraction(1, x_value) >= target:
                 continue
-            tail = remainder - Fraction(1, y_value)
-            if tail.numerator != 1 or tail.denominator <= 0:
-                continue
-            z_value = tail.denominator
-            if check_identity(n=n_value, x=x_value, y=y_value, z=z_value):
-                return (x_value, y_value, z_value)
-    return None
+            remainder = target - Fraction(1, x_value)
+            y_start = _ceil_reciprocal(remainder)
+            for delta in range(t_max + 1):
+                y_value = y_start + delta
+                if y_value < 2:
+                    continue
+                tail = remainder - Fraction(1, y_value)
+                if tail.numerator != 1 or tail.denominator <= 0:
+                    continue
+                z_value = tail.denominator
+                if check_identity(n=n_value, x=x_value, y=y_value, z=z_value):
+                    return (x_value, y_value, z_value)
+
+    solved = find_solution_fast(n_value)
+    if solved is not None:
+        return solved
+
+    raise RuntimeError(
+        "Procedural identity matched residue class but no decomposition was found "
+        f"for n={n_value} via procedural search or solver fallback."
+    )
 
 
 def _eval_expr_int(expression: str, n_value: int) -> int | None:
@@ -137,11 +153,16 @@ def _conditions_hold(identity: Identity, n_value: int) -> bool:
     return True
 
 
+def identity_applies(identity: Identity, n: int) -> bool:
+    """Return whether an identity is applicable to ``n`` by gate+conditions."""
+    if n <= 0:
+        return False
+    return _conditions_hold(identity, n)
+
+
 def eval_identity(identity: Identity, n: int) -> tuple[int, int, int] | None:
     """Evaluate one identity at ``n`` and validate exact equality."""
-    if n <= 0:
-        return None
-    if not _conditions_hold(identity, n):
+    if not identity_applies(identity, n):
         return None
 
     if identity.kind == "procedural":
