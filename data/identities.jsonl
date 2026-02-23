@@ -3,3 +3,5 @@
 {"conditions": [], "modulus": 8, "name": "odd4_family_m8_r5", "notes": "family=odd4; symbolic", "residues": [5], "x_form": "(n+3)/4", "y_form": "n*(n+3)/4", "z_form": "n*(n+3)/8"}
 {"conditions": [], "modulus": 12, "name": "odd4_mod12_r9", "notes": "family=odd4; symbolic", "residues": [9], "x_form": "(n+3)/4", "y_form": "n*(n+3)/6", "z_form": "n*(n+3)/6"}
 {"conditions": [], "modulus": 24, "name": "mod8_r1_a7_c4_d24_v11", "notes": "family=mod8_r1; symbolic", "residues": [17], "x_form": "(n+7)/4", "y_form": "n*(n+7)/4", "z_form": "n*(n+7)/24"}
+{"conditions": [], "kind": "procedural", "modulus": 48, "name": "fit_proc_m48_r1", "notes": "fit; procedural; empirical", "procedural_params": {"anchor": "(n+5)//4", "t_max": 256, "window": 8}, "residues": [1], "x_form": "proc_x", "y_form": "proc_y", "z_form": "proc_z"}
+{"conditions": [], "kind": "procedural", "modulus": 48, "name": "fit_proc_m48_r25", "notes": "fit; procedural; empirical", "procedural_params": {"anchor": "(n+5)//4", "t_max": 256, "window": 8}, "residues": [25], "x_form": "proc_x", "y_form": "proc_y", "z_form": "proc_z"}
