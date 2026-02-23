@@ -14,6 +14,7 @@ from rich.console import Console
 from .cert import Certificate, from_jsonl, make_certificate, to_jsonl
 from .coverage import coverage_report
 from .erdos_straus import check_identity, find_solution, find_solution_fast
+from .fit import fit_identities
 from .identities import Identity, eval_identity, identity_from_jsonl, verify_identity
 from .loop import run_loop
 from .mine import mine_identities
@@ -268,6 +269,47 @@ def id_targets_cmd(
     console.print(f"uncovered residues: {report['uncovered_residues']}")
 
 
+@app.command("fit")
+def fit_cmd(
+    in_file: Path = typer.Option(..., "--in", help="Input solution JSONL file."),
+    modulus: int = typer.Option(
+        ...,
+        "--modulus",
+        help="Target modulus for residue filtering.",
+        callback=_validate_positive_modulus,
+    ),
+    residue: int = typer.Option(..., "--residue", help="Target residue class."),
+    out_file: Path = typer.Option(..., "--out", help="Output fitted identity JSONL."),
+    max_identities: int = typer.Option(10, "--max-identities", help="Maximum fitted identities."),
+) -> None:
+    """Fit deterministic residue-class identities from solved samples.
+
+    Examples:
+        strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 1 \
+            --out data/identities_fit.jsonl
+        strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 25 \
+            --out data/identities_fit.jsonl --max-identities 10
+    """
+    if max_identities <= 0:
+        raise typer.BadParameter("Expected --max-identities > 0.")
+
+    fitted = fit_identities(
+        in_file=in_file,
+        out_file=out_file,
+        modulus=modulus,
+        residue=residue,
+        max_identities=max_identities,
+    )
+    symbolic = sum(1 for identity in fitted if "symbolic" in identity.notes)
+    empirical_only = sum(1 for identity in fitted if "empirical-only" in identity.notes)
+    console.print(
+        f"summary: identities_found={len(fitted)}, "
+        f"symbolic_verified={symbolic}, empirical_only={empirical_only}"
+    )
+    if not fitted:
+        raise typer.Exit(code=1)
+
+
 @app.command("loop")
 def loop_cmd(
     identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
@@ -299,6 +341,16 @@ def loop_cmd(
         200,
         "--progress-every",
         help="Print per-target progress every N generated examples.",
+    ),
+    enable_fit_fallback: bool = typer.Option(
+        False,
+        "--enable-fit-fallback",
+        help="Run data-driven fit mining when template mining adds no identities.",
+    ),
+    fit_max_identities: int = typer.Option(
+        10,
+        "--fit-max-identities",
+        help="Maximum identities per residue for fit fallback.",
     ),
 ) -> None:
     """Run one end-to-end deterministic loop for mining and coverage updates.
@@ -337,6 +389,8 @@ def loop_cmd(
         target_timeout_seconds=target_timeout_seconds,
         progress_every=progress_every,
         progress_callback=_progress,
+        enable_fit_fallback=enable_fit_fallback,
+        fit_max_identities=fit_max_identities,
     )
 
     after = result["after"]

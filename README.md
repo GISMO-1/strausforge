@@ -80,6 +80,14 @@ Run mining:
 strausforge mine --in certs.jsonl --out data/identities.jsonl --max-identities 50
 ```
 
+
+Data-driven fit mining for hard residues:
+
+```bash
+strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 1 --out data/identities_fit.jsonl --max-identities 10
+strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 25 --out data/identities_fit.jsonl --max-identities 10
+```
+
 Check which identity applies at one `n`:
 
 ```bash
@@ -113,7 +121,7 @@ Use the loop command to run one deterministic end-to-end mining iteration:
 Example:
 
 ```bash
-strausforge loop --identity data/identities.jsonl --modulus 24 --max-targets 4 --max-per-target 3 --max-new-identities 10
+strausforge loop --identity data/identities.jsonl --modulus 24 --max-targets 4 --max-per-target 3 --max-new-identities 10 --enable-fit-fallback --fit-max-identities 10
 ```
 
 What to expect:
