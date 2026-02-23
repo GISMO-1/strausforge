@@ -15,7 +15,13 @@ from .cert import Certificate, from_jsonl, make_certificate, to_jsonl
 from .coverage import coverage_report
 from .erdos_straus import check_identity, find_solution, find_solution_fast
 from .fit import fit_identities
-from .identities import Identity, eval_identity, identity_from_jsonl, verify_identity
+from .identities import (
+    Identity,
+    eval_identity,
+    identity_applies,
+    identity_from_jsonl,
+    verify_identity,
+)
 from .loop import run_loop
 from .mine import mine_identities
 
@@ -199,9 +205,18 @@ def id_check_cmd(
         strausforge id-check --identity data/identities.jsonl --n 35
     """
     for identity in _load_identities(identity_file):
+        applies = identity_applies(identity, n)
+        if not applies:
+            continue
+
         triple = eval_identity(identity, n)
         if triple is None:
-            continue
+            console.print(
+                "identity applies but did not produce a valid decomposition: "
+                f"identity={identity.name}, n={n}"
+            )
+            raise typer.Exit(code=1)
+
         x, y, z = triple
         console.print(f"identity={identity.name}, n={n}, x={x}, y={y}, z={z}")
         return

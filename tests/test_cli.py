@@ -185,3 +185,14 @@ def test_id_targets_rejects_non_positive_modulus(tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "Expected --modulus > 0." in _strip_ansi(result.output)
+
+
+def test_id_check_regression_values_for_procedural_identities() -> None:
+    regression_values = [18481, 35809, 58921, 87481, 99961]
+    for n_value in regression_values:
+        result = runner.invoke(
+            app,
+            ["id-check", "--identity", "data/identities.jsonl", "--n", str(n_value)],
+        )
+        assert result.exit_code == 0
+        assert f"n={n_value}" in result.stdout
