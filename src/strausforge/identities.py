@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from fractions import Fraction
+from typing import Any
 
 import sympy
 
@@ -23,6 +24,8 @@ class Identity:
         y_form: SymPy/Python expression string in variable ``n``.
         z_form: SymPy/Python expression string in variable ``n``.
         conditions: Extra boolean constraints in ``n``.
+        kind: Identity representation kind: ``symbolic`` or ``procedural``.
+        procedural_params: Optional deterministic rule parameters.
         notes: Human-readable metadata.
     """
 
@@ -33,7 +36,9 @@ class Identity:
     y_form: str
     z_form: str
     conditions: list[str]
-    notes: str
+    notes: str = ""
+    kind: str = "symbolic"
+    procedural_params: dict[str, Any] | None = None
 
 
 def identity_to_jsonl(identity: Identity) -> str:
@@ -52,8 +57,49 @@ def identity_from_jsonl(line: str) -> Identity:
         y_form=str(payload["y_form"]),
         z_form=str(payload["z_form"]),
         conditions=[str(item) for item in payload.get("conditions", [])],
+        kind=str(payload.get("kind", "symbolic")),
+        procedural_params=payload.get("procedural_params"),
         notes=str(payload.get("notes", "")),
     )
+
+
+def _ceil_reciprocal(value: Fraction) -> int:
+    if value <= 0:
+        raise ValueError("Expected positive fraction")
+    return (value.denominator + value.numerator - 1) // value.numerator
+
+
+def _eval_procedural_identity(identity: Identity, n_value: int) -> tuple[int, int, int] | None:
+    if identity.procedural_params is None:
+        return None
+
+    anchor = str(identity.procedural_params.get("anchor", "(n+5)//4"))
+    if anchor != "(n+5)//4":
+        return None
+
+    window = int(identity.procedural_params.get("window", 8))
+    t_max = int(identity.procedural_params.get("t_max", 256))
+    if window < 0 or t_max < 0:
+        return None
+
+    x0 = (n_value + 5) // 4
+    target = Fraction(4, n_value)
+    for x_value in range(x0 - window, x0 + window + 1):
+        if x_value < 2 or Fraction(1, x_value) >= target:
+            continue
+        remainder = target - Fraction(1, x_value)
+        y_start = _ceil_reciprocal(remainder)
+        for delta in range(t_max + 1):
+            y_value = y_start + delta
+            if y_value < 2:
+                continue
+            tail = remainder - Fraction(1, y_value)
+            if tail.numerator != 1 or tail.denominator <= 0:
+                continue
+            z_value = tail.denominator
+            if check_identity(n=n_value, x=x_value, y=y_value, z=z_value):
+                return (x_value, y_value, z_value)
+    return None
 
 
 def _eval_expr_int(expression: str, n_value: int) -> int | None:
@@ -97,6 +143,9 @@ def eval_identity(identity: Identity, n: int) -> tuple[int, int, int] | None:
         return None
     if not _conditions_hold(identity, n):
         return None
+
+    if identity.kind == "procedural":
+        return _eval_procedural_identity(identity, n)
 
     x = _eval_expr_int(identity.x_form, n)
     y = _eval_expr_int(identity.y_form, n)
@@ -152,6 +201,8 @@ def verify_identity(identity: Identity, n_min: int, n_max: int) -> dict[str, obj
 
 def verify_identity_symbolic(identity: Identity) -> bool:
     """Attempt symbolic proof by residue substitution with SymPy."""
+    if identity.kind == "procedural":
+        return False
     n = sympy.Symbol("n", integer=True, positive=True)
     k = sympy.Symbol("k", integer=True, nonnegative=True)
 
