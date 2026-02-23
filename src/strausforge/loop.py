@@ -9,6 +9,7 @@ from time import monotonic
 from .cert import make_certificate, to_jsonl
 from .coverage import coverage_report
 from .erdos_straus import find_solution_fast
+from .fit import fit_identities
 from .identities import Identity, identity_from_jsonl, identity_to_jsonl
 from .mine import mine_identities
 
@@ -61,6 +62,8 @@ def run_loop(
     target_timeout_seconds: float = 30.0,
     progress_every: int = 200,
     progress_callback: Callable[[str], None] | None = None,
+    enable_fit_fallback: bool = False,
+    fit_max_identities: int = 10,
 ) -> dict[str, object]:
     """Run one deterministic iterative coverage-improvement loop.
 
@@ -127,6 +130,23 @@ def run_loop(
 
     mined_path = identity_path.parent / f".{identity_path.name}.loop_mined.tmp"
     mined_identities = mine_identities(certs_path, mined_path, max_identities=max_new_identities)
+
+    if enable_fit_fallback and len(mined_identities) == 0:
+        fit_out = identity_path.parent / f".{identity_path.name}.loop_fit.tmp"
+        fit_identities_buffer: list[Identity] = []
+        for residue in targets:
+            fit_identities_buffer.extend(
+                fit_identities(
+                    in_file=certs_path,
+                    out_file=fit_out,
+                    modulus=modulus,
+                    residue=residue,
+                    max_identities=fit_max_identities,
+                )
+            )
+        mined_identities = fit_identities_buffer
+        if fit_out.exists():
+            fit_out.unlink()
 
     seen = {_identity_key(identity) for identity in identities}
     new_identities: list[Identity] = []

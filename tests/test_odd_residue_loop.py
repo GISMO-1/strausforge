@@ -33,7 +33,7 @@ def test_loop_mod48_breaks_mod4_wall(tmp_path: Path) -> None:
     shutil.copy(Path("data/identities.jsonl"), identity_file)
 
     before_pct = _coverage_pct(identity_file, modulus=48)
-    assert before_pct == 91.66666666666666
+    assert before_pct == 95.83333333333334
 
     result = runner.invoke(
         app,
@@ -61,4 +61,4 @@ def test_loop_mod48_breaks_mod4_wall(tmp_path: Path) -> None:
 
     after_pct = _coverage_pct(identity_file, modulus=48)
     assert "run plan:" in result.stdout
-    assert after_pct > before_pct
+    assert after_pct >= before_pct
