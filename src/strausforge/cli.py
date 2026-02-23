@@ -281,6 +281,21 @@ def fit_cmd(
     residue: int = typer.Option(..., "--residue", help="Target residue class."),
     out_file: Path = typer.Option(..., "--out", help="Output fitted identity JSONL."),
     max_identities: int = typer.Option(10, "--max-identities", help="Maximum fitted identities."),
+    strategy: str = typer.Option(
+        "auto",
+        "--strategy",
+        help="Fit strategy: affine, procedural, or auto (affine then procedural).",
+    ),
+    window: int = typer.Option(
+        8,
+        "--window",
+        help="x-neighborhood half-window for procedural fitting.",
+    ),
+    t_max: int = typer.Option(
+        256,
+        "--t-max",
+        help="Maximum y increment attempts in 2-term completion.",
+    ),
 ) -> None:
     """Fit deterministic residue-class identities from solved samples.
 
@@ -288,10 +303,16 @@ def fit_cmd(
         strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 1 \
             --out data/identities_fit.jsonl
         strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 25 \
-            --out data/identities_fit.jsonl --max-identities 10
+            --out data/identities_fit.jsonl --strategy procedural --window 8 --t-max 256
     """
     if max_identities <= 0:
         raise typer.BadParameter("Expected --max-identities > 0.")
+    if strategy not in {"auto", "affine", "procedural"}:
+        raise typer.BadParameter("Expected --strategy to be one of auto, affine, procedural.")
+    if window < 0:
+        raise typer.BadParameter("Expected --window >= 0.")
+    if t_max < 0:
+        raise typer.BadParameter("Expected --t-max >= 0.")
 
     fitted = fit_identities(
         in_file=in_file,
@@ -299,6 +320,9 @@ def fit_cmd(
         modulus=modulus,
         residue=residue,
         max_identities=max_identities,
+        strategy=strategy,
+        window=window,
+        t_max=t_max,
     )
     symbolic = sum(1 for identity in fitted if "symbolic" in identity.notes)
     empirical_only = sum(1 for identity in fitted if "empirical-only" in identity.notes)

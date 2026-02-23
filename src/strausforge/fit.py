@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from fractions import Fraction
 from math import gcd
 from multiprocessing import Process, Queue
 from pathlib import Path
@@ -182,32 +183,100 @@ def _candidate_identity(
     )
 
 
-def fit_identities(
-    in_file: Path,
-    out_file: Path,
+def _ceil_reciprocal(value: Fraction) -> int:
+    return (value.denominator + value.numerator - 1) // value.numerator
+
+
+def _complete_two_term_remainder(
+    remainder: Fraction,
     *,
+    t_max: int,
+) -> tuple[int, int] | None:
+    if remainder <= 0:
+        return None
+    y_start = _ceil_reciprocal(remainder)
+    for delta in range(t_max + 1):
+        y_value = y_start + delta
+        tail = remainder - Fraction(1, y_value)
+        if tail.numerator == 1 and tail.denominator > 0:
+            return (y_value, tail.denominator)
+    return None
+
+
+def _procedural_triple(n: int, *, window: int, t_max: int) -> tuple[int, int, int] | None:
+    x0 = (n + 5) // 4
+    target = Fraction(4, n)
+    for x_value in range(x0 - window, x0 + window + 1):
+        if x_value < 2 or Fraction(1, x_value) >= target:
+            continue
+        completed = _complete_two_term_remainder(target - Fraction(1, x_value), t_max=t_max)
+        if completed is None:
+            continue
+        y_value, z_value = completed
+        if min(x_value, y_value, z_value) > 0 and check_identity(
+            n=n,
+            x=x_value,
+            y=y_value,
+            z=z_value,
+        ):
+            return (x_value, y_value, z_value)
+    return None
+
+
+def _fit_procedural_identity(
+    *,
+    samples: list[SolutionSample],
     modulus: int,
     residue: int,
+    window: int,
+    t_max: int,
+) -> Identity | None:
+    if window < 0 or t_max < 0:
+        raise ValueError("window and t_max must be non-negative")
+
+    if len(samples) < 8:
+        return None
+
+    sample_values = [sample.n for sample in samples]
+    for n in sample_values:
+        if _procedural_triple(n, window=window, t_max=t_max) is None:
+            return None
+
+    n_values: list[int] = []
+    n_value = residue % modulus
+    if n_value <= 0:
+        n_value += modulus
+    while n_value < 2:
+        n_value += modulus
+    while len(n_values) < 200:
+        n_values.append(n_value)
+        n_value += modulus
+
+    for n in n_values:
+        if _procedural_triple(n, window=window, t_max=t_max) is None:
+            return None
+
+    return Identity(
+        name=f"fit_proc_m{modulus}_r{residue}",
+        modulus=modulus,
+        residues=[residue],
+        x_form="proc_x",
+        y_form="proc_y",
+        z_form="proc_z",
+        conditions=[],
+        kind="procedural",
+        procedural_params={"anchor": "(n+5)//4", "window": window, "t_max": t_max},
+        notes="fit; procedural; empirical",
+    )
+
+
+def _fit_affine_identities(
+    *,
+    samples: list[SolutionSample],
+    modulus: int,
+    target_residue: int,
     max_identities: int,
 ) -> list[Identity]:
-    """Fit and verify deterministic identities from solved sample JSONL.
-
-    Examples:
-        strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 1 \
-            --out data/identities_fit.jsonl
-        strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 25 \
-            --out data/identities_fit.jsonl --max-identities 5
-    """
-    if modulus <= 0:
-        raise ValueError("modulus must be positive")
-
-    target_residue = residue % modulus
-    samples = [
-        sample for sample in _load_solution_samples(in_file) if sample.n % modulus == target_residue
-    ]
-    if len(samples) < 8:
-        return []
-
     template_candidates = _fit_template_candidates(samples, max_identities=max_identities)
 
     sample_ns: list[int] = []
@@ -276,7 +345,61 @@ def fit_identities(
         identities.append(identity)
         if len(identities) >= max_identities:
             break
+    return identities
 
+
+def fit_identities(
+    in_file: Path,
+    out_file: Path,
+    *,
+    modulus: int,
+    residue: int,
+    max_identities: int,
+    strategy: str = "auto",
+    window: int = 8,
+    t_max: int = 256,
+) -> list[Identity]:
+    """Fit and verify deterministic identities from solved sample JSONL.
+
+    Examples:
+        strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 1 \
+            --out data/identities_fit.jsonl
+        strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 25 \
+            --out data/identities_fit.jsonl --strategy procedural --window 8 --t-max 256
+    """
+    if modulus <= 0:
+        raise ValueError("modulus must be positive")
+    if strategy not in {"auto", "affine", "procedural"}:
+        raise ValueError("strategy must be one of: auto, affine, procedural")
+
+    target_residue = residue % modulus
+    samples = [
+        sample for sample in _load_solution_samples(in_file) if sample.n % modulus == target_residue
+    ]
+
+    identities: list[Identity] = []
+    if strategy in {"auto", "affine"} and len(samples) >= 8:
+        identities.extend(
+            _fit_affine_identities(
+                samples=samples,
+                modulus=modulus,
+                target_residue=target_residue,
+                max_identities=max_identities,
+            )
+        )
+
+    if strategy in {"auto", "procedural"} and len(identities) < max_identities:
+        procedural = _fit_procedural_identity(
+            samples=samples,
+            modulus=modulus,
+            residue=target_residue,
+            window=window,
+            t_max=t_max,
+        )
+        if procedural is not None:
+            identities.append(procedural)
+
+    identities = identities[:max_identities]
     out_file.parent.mkdir(parents=True, exist_ok=True)
     with out_file.open("w", encoding="utf-8") as handle:
         for identity in identities:
