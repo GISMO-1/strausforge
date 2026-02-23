@@ -6,3 +6,12 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+# generated outputs / local experiments
+hard.jsonl
+hard_all_lines.jsonl
+hard_all_lines.utf8.jsonl
+hard_48_r1_r25.jsonl
+out.jsonl
+extract_hard.py
+data/certs_*.jsonl
+data/identities_fit*.jsonl
