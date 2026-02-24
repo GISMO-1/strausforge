@@ -292,4 +292,42 @@ def test_profile_proc_heuristic_prime_window_reduces_expanded_count() -> None:
 
     assert "expanded_primes=" in off_clean
     assert "expanded_primes=" in prime_clean
+    assert "expanded_squares=" in off_clean
+    assert "expanded_squares=" in prime_clean
     assert prime_expanded < off_expanded
+
+
+def test_profile_proc_heuristic_prime_or_square_window_handles_prime_square_case() -> None:
+    common = [
+        "profile",
+        "--identity",
+        "data/identities.jsonl",
+        "--n-min",
+        "994009",
+        "--n-max",
+        "994009",
+        "--top",
+        "10",
+    ]
+
+    off_result = runner.invoke(app, common + ["--proc-heuristic", "off"])
+    heuristic_result = runner.invoke(app, common + ["--proc-heuristic", "prime-or-square-window"])
+
+    assert off_result.exit_code == 0
+    assert heuristic_result.exit_code == 0
+
+    off_clean = _strip_ansi(off_result.stdout)
+    heuristic_clean = _strip_ansi(heuristic_result.stdout)
+
+    off_line = next(line for line in off_clean.splitlines() if "identity=fit_proc_m48_r25," in line)
+    heuristic_line = next(
+        line for line in heuristic_clean.splitlines() if "identity=fit_proc_m48_r25," in line
+    )
+
+    assert "fast=0" in off_line
+    assert "expanded=1" in off_line
+    assert "expanded_squares=1/1" in off_clean
+
+    assert "fast=1" in heuristic_line
+    assert "expanded=0" in heuristic_line
+    assert "expanded_squares=0/0" in heuristic_clean

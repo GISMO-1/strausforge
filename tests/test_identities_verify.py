@@ -104,3 +104,22 @@ def test_procedural_identities_have_no_failures_on_small_verify_window() -> None
         stats = verify_identity(identity, n_min=2, n_max=5000)
         assert stats["tested"] > 0
         assert stats["failed"] == 0
+
+
+def test_prime_or_square_window_heuristic_turns_known_prime_square_into_fast_path() -> None:
+    identities = _load_identities(Path("data/identities.jsonl"))
+    by_name = {identity.name: identity for identity in identities}
+    identity = by_name["fit_proc_m48_r25"]
+
+    n_value = 994009
+    _, baseline_path, baseline_window, _ = _eval_procedural_identity(identity, n_value)
+    _, heuristic_path, heuristic_window, _ = _eval_procedural_identity(
+        identity,
+        n_value,
+        proc_heuristic="prime-or-square-window",
+    )
+
+    assert baseline_path == "expanded"
+    assert baseline_window == 64
+    assert heuristic_path == "fast"
+    assert heuristic_window == 64

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass
 from fractions import Fraction
 from typing import Any
@@ -62,6 +63,7 @@ class ProceduralProfileStats:
     expanded_success: int = 0
     solver_fallback_success: int = 0
     expanded_prime_count: int = 0
+    expanded_square_count: int = 0
     max_window_used: int = 0
     max_t_used: int = 0
 
@@ -150,6 +152,9 @@ def _eval_procedural_identity(
     initial_window = int(identity.procedural_params.get("window", 8))
     if proc_heuristic == "prime-window":
         initial_window = 64 if sympy.isprime(n_value) else 8
+    elif proc_heuristic == "prime-or-square-window":
+        is_square = _is_square(n_value)
+        initial_window = 64 if sympy.isprime(n_value) or is_square else 8
     elif proc_heuristic != "off":
         raise ValueError(f"Unknown procedural heuristic: {proc_heuristic}")
     initial_t_max = int(identity.procedural_params.get("t_max", 256))
@@ -209,6 +214,14 @@ def _eval_expr_int(expression: str, n_value: int) -> int | None:
     if sympy.Integer(int_value) != sympy.simplify(value):
         return None
     return int_value
+
+
+def _is_square(n_value: int) -> bool:
+    """Return whether ``n_value`` is a perfect square."""
+    if n_value < 0:
+        return False
+    root = math.isqrt(n_value)
+    return root * root == n_value
 
 
 def _conditions_hold(identity: Identity, n_value: int) -> bool:
@@ -308,6 +321,8 @@ def profile_identities(
                 stats.expanded_success += 1
                 if sympy.isprime(n_value):
                     stats.expanded_prime_count += 1
+                if _is_square(n_value):
+                    stats.expanded_square_count += 1
                 hard_cases.append(
                     HardCaseRecord(
                         identity=identity.name,

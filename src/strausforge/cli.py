@@ -28,7 +28,7 @@ from .mine import mine_identities
 
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
-_PROC_HEURISTIC_CHOICES = {"off", "prime-window"}
+_PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window"}
 
 
 @app.command()
@@ -203,7 +203,7 @@ def id_check_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off or prime-window.",
+        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
     ),
 ) -> None:
     """Find the first identity that applies to ``n`` and print ``(x, y, z)``.
@@ -212,9 +212,13 @@ def id_check_cmd(
         strausforge id-check --identity data/identities.jsonl --n 35
         strausforge id-check --identity data/identities.jsonl --n 35809 \
             --proc-heuristic prime-window
+        strausforge id-check --identity data/identities.jsonl --n 994009 \
+            --proc-heuristic prime-or-square-window
     """
     if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
-        raise typer.BadParameter("Expected --proc-heuristic to be one of off, prime-window.")
+        raise typer.BadParameter(
+            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
+        )
 
     for identity in _load_identities(identity_file):
         applies = identity_applies(identity, n)
@@ -245,7 +249,7 @@ def id_verify_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off or prime-window.",
+        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
     ),
 ) -> None:
     """Empirically verify each stored identity over a range.
@@ -254,11 +258,15 @@ def id_verify_cmd(
         strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500
         strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500 \
             --proc-heuristic prime-window
+        strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500 \
+            --proc-heuristic prime-or-square-window
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
     if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
-        raise typer.BadParameter("Expected --proc-heuristic to be one of off, prime-window.")
+        raise typer.BadParameter(
+            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
+        )
 
     for identity in _load_identities(identity_file):
         stats = verify_identity(identity, n_min=n_min, n_max=n_max, proc_heuristic=proc_heuristic)
@@ -277,7 +285,7 @@ def profile_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off or prime-window.",
+        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
     ),
 ) -> None:
     """Profile procedural hardness and fallback rates over a range.
@@ -287,13 +295,17 @@ def profile_cmd(
         strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 50000 --top 10
         strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 50000 \
             --proc-heuristic prime-window
+        strausforge profile --identity data/identities.jsonl --n-min 994009 --n-max 994009 \
+            --proc-heuristic prime-or-square-window
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
     if top <= 0:
         raise typer.BadParameter("Expected --top > 0.")
     if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
-        raise typer.BadParameter("Expected --proc-heuristic to be one of off, prime-window.")
+        raise typer.BadParameter(
+            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
+        )
 
     identities = _load_identities(identity_file)
     profile = profile_identities(
@@ -320,6 +332,7 @@ def profile_cmd(
         if identity.kind == "procedural":
             line += (
                 f", expanded_primes={stats.expanded_prime_count}/{stats.expanded_success}, "
+                f"expanded_squares={stats.expanded_square_count}/{stats.expanded_success}, "
                 f"max_window_used={stats.max_window_used}, max_t_used={stats.max_t_used}"
             )
         console.print(line)
