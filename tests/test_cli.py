@@ -16,6 +16,11 @@ def _strip_ansi(text: str) -> str:
     return _ANSI_ESCAPE_RE.sub("", text)
 
 
+def _count_residue_hits(n_min: int, n_max: int, modulus: int, residue: int) -> int:
+    values = [n for n in range(n_min, n_max + 1) if n % modulus == residue]
+    return len(values)
+
+
 def test_check_command_pass() -> None:
     result = runner.invoke(app, ["check", "--n", "5", "--x", "2", "--y", "4", "--z", "20"])
     assert result.exit_code == 0
@@ -196,3 +201,51 @@ def test_id_check_regression_values_for_procedural_identities() -> None:
         )
         assert result.exit_code == 0
         assert f"n={n_value}" in result.stdout
+
+
+def test_profile_command_reports_deterministic_hardest_order() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "profile",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "2",
+            "--n-max",
+            "50000",
+            "--top",
+            "25",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "identity profile summary:" in result.stdout
+    assert "identity=fit_proc_m48_r1" in result.stdout
+    assert "identity=fit_proc_m48_r25" in result.stdout
+
+    cleaned = _strip_ansi(result.stdout)
+    r1_line = next(line for line in cleaned.splitlines() if "identity=fit_proc_m48_r1," in line)
+    r25_line = next(line for line in cleaned.splitlines() if "identity=fit_proc_m48_r25," in line)
+
+    expected_r1_total = _count_residue_hits(2, 50000, 48, 1)
+    expected_r25_total = _count_residue_hits(2, 50000, 48, 25)
+    assert f"total={expected_r1_total}" in r1_line
+    assert f"total={expected_r25_total}" in r25_line
+    assert "fast=" in r1_line and "fast=0" not in r1_line
+    assert "fast=" in r25_line and "fast=0" not in r25_line
+
+    hardest_lines = [
+        line
+        for line in cleaned.splitlines()
+        if line.startswith("identity=") and "path=" in line and "window_used=" in line
+    ]
+    sorted_hardest = sorted(
+        hardest_lines,
+        key=lambda line: (
+            0 if "path=expanded" in line else 1,
+            int(line.split("window_used=")[1].split(",")[0]),
+            int(line.split("t_used=")[1]),
+            int(line.split("n=")[1].split(",")[0]),
+        ),
+    )
+    assert hardest_lines == sorted_hardest
