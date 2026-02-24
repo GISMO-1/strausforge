@@ -2,6 +2,7 @@ from pathlib import Path
 
 from strausforge.erdos_straus import check_identity
 from strausforge.identities import (
+    _eval_procedural_identity,
     eval_identity,
     identity_from_jsonl,
     verify_identity,
@@ -58,6 +59,36 @@ def test_procedural_regression_values_resolve_with_valid_decompositions() -> Non
             assert triple is not None
             x, y, z = triple
             assert check_identity(n=n, x=x, y=y, z=z)
+
+
+def test_prime_window_heuristic_turns_known_hard_prime_into_fast_path() -> None:
+    identities = _load_identities(Path("data/identities.jsonl"))
+    by_name = {identity.name: identity for identity in identities}
+    identity = by_name["fit_proc_m48_r1"]
+
+    n_value = 35809
+    _, baseline_path, baseline_window, _ = _eval_procedural_identity(identity, n_value)
+    _, heuristic_path, heuristic_window, _ = _eval_procedural_identity(
+        identity,
+        n_value,
+        proc_heuristic="prime-window",
+    )
+
+    assert baseline_path == "expanded"
+    assert baseline_window == 64
+    assert heuristic_path == "fast"
+    assert heuristic_window == 64
+
+
+def test_procedural_heuristic_off_matches_eval_default_behavior() -> None:
+    identities = _load_identities(Path("data/identities.jsonl"))
+    by_name = {identity.name: identity for identity in identities}
+    identity = by_name["fit_proc_m48_r25"]
+    n_value = 58921
+
+    baseline = eval_identity(identity, n_value)
+    explicit_off = eval_identity(identity, n_value, proc_heuristic="off")
+    assert baseline == explicit_off
 
 
 def test_procedural_identities_have_no_failures_on_small_verify_window() -> None:

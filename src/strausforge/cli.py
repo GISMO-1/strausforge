@@ -28,6 +28,7 @@ from .mine import mine_identities
 
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
+_PROC_HEURISTIC_CHOICES = {"off", "prime-window"}
 
 
 @app.command()
@@ -199,18 +200,28 @@ def mine_cmd(
 def id_check_cmd(
     identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
     n: int = typer.Option(..., "--n", help="Target n."),
+    proc_heuristic: str = typer.Option(
+        "off",
+        "--proc-heuristic",
+        help="Procedural heuristic: off or prime-window.",
+    ),
 ) -> None:
     """Find the first identity that applies to ``n`` and print ``(x, y, z)``.
 
     Examples:
         strausforge id-check --identity data/identities.jsonl --n 35
+        strausforge id-check --identity data/identities.jsonl --n 35809 \
+            --proc-heuristic prime-window
     """
+    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
+        raise typer.BadParameter("Expected --proc-heuristic to be one of off, prime-window.")
+
     for identity in _load_identities(identity_file):
         applies = identity_applies(identity, n)
         if not applies:
             continue
 
-        triple = eval_identity(identity, n)
+        triple = eval_identity(identity, n, proc_heuristic=proc_heuristic)
         if triple is None:
             console.print(
                 "identity applies but did not produce a valid decomposition: "
@@ -231,17 +242,26 @@ def id_verify_cmd(
     identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
     n_min: int = typer.Option(..., "--n-min", help="Minimum n."),
     n_max: int = typer.Option(..., "--n-max", help="Maximum n."),
+    proc_heuristic: str = typer.Option(
+        "off",
+        "--proc-heuristic",
+        help="Procedural heuristic: off or prime-window.",
+    ),
 ) -> None:
     """Empirically verify each stored identity over a range.
 
     Examples:
         strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500
+        strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500 \
+            --proc-heuristic prime-window
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
+    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
+        raise typer.BadParameter("Expected --proc-heuristic to be one of off, prime-window.")
 
     for identity in _load_identities(identity_file):
-        stats = verify_identity(identity, n_min=n_min, n_max=n_max)
+        stats = verify_identity(identity, n_min=n_min, n_max=n_max, proc_heuristic=proc_heuristic)
         console.print(
             f"identity={identity.name}, tested={stats['tested']}, "
             f"passed={stats['passed']}, failed={stats['failed']}"
@@ -254,20 +274,35 @@ def profile_cmd(
     n_min: int = typer.Option(..., "--n-min", help="Minimum n."),
     n_max: int = typer.Option(..., "--n-max", help="Maximum n."),
     top: int = typer.Option(25, "--top", help="Number of hardest cases to print."),
+    proc_heuristic: str = typer.Option(
+        "off",
+        "--proc-heuristic",
+        help="Procedural heuristic: off or prime-window.",
+    ),
 ) -> None:
     """Profile procedural hardness and fallback rates over a range.
 
     Examples:
         strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 2000000
         strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 50000 --top 10
+        strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 50000 \
+            --proc-heuristic prime-window
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
     if top <= 0:
         raise typer.BadParameter("Expected --top > 0.")
+    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
+        raise typer.BadParameter("Expected --proc-heuristic to be one of off, prime-window.")
 
     identities = _load_identities(identity_file)
-    profile = profile_identities(identities=identities, n_min=n_min, n_max=n_max, top_k=top)
+    profile = profile_identities(
+        identities=identities,
+        n_min=n_min,
+        n_max=n_max,
+        top_k=top,
+        proc_heuristic=proc_heuristic,
+    )
 
     console.print("identity profile summary:")
     for identity in identities:
@@ -283,7 +318,10 @@ def profile_cmd(
             f"solver_fallback={stats.solver_fallback_success} ({solver_pct:.2f}%)"
         )
         if identity.kind == "procedural":
-            line += f", max_window_used={stats.max_window_used}, max_t_used={stats.max_t_used}"
+            line += (
+                f", expanded_primes={stats.expanded_prime_count}/{stats.expanded_success}, "
+                f"max_window_used={stats.max_window_used}, max_t_used={stats.max_t_used}"
+            )
         console.print(line)
 
     console.print(f"top {len(profile.hardest_records)} hardest n records:")

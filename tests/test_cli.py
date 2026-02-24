@@ -249,3 +249,47 @@ def test_profile_command_reports_deterministic_hardest_order() -> None:
         ),
     )
     assert hardest_lines == sorted_hardest
+
+
+def test_id_check_proc_heuristic_off_matches_default_output() -> None:
+    args = ["id-check", "--identity", "data/identities.jsonl", "--n", "35809"]
+    baseline = runner.invoke(app, args)
+    explicit_off = runner.invoke(app, args + ["--proc-heuristic", "off"])
+
+    assert baseline.exit_code == 0
+    assert explicit_off.exit_code == 0
+    assert baseline.stdout == explicit_off.stdout
+
+
+def test_profile_proc_heuristic_prime_window_reduces_expanded_count() -> None:
+    common = [
+        "profile",
+        "--identity",
+        "data/identities.jsonl",
+        "--n-min",
+        "35700",
+        "--n-max",
+        "35900",
+        "--top",
+        "10",
+    ]
+    off_result = runner.invoke(app, common + ["--proc-heuristic", "off"])
+    prime_result = runner.invoke(app, common + ["--proc-heuristic", "prime-window"])
+
+    assert off_result.exit_code == 0
+    assert prime_result.exit_code == 0
+
+    off_clean = _strip_ansi(off_result.stdout)
+    prime_clean = _strip_ansi(prime_result.stdout)
+
+    off_line = next(line for line in off_clean.splitlines() if "identity=fit_proc_m48_r1," in line)
+    prime_line = next(
+        line for line in prime_clean.splitlines() if "identity=fit_proc_m48_r1," in line
+    )
+
+    off_expanded = int(off_line.split("expanded=")[1].split(" ")[0])
+    prime_expanded = int(prime_line.split("expanded=")[1].split(" ")[0])
+
+    assert "expanded_primes=" in off_clean
+    assert "expanded_primes=" in prime_clean
+    assert prime_expanded < off_expanded

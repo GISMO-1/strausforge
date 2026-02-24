@@ -61,6 +61,7 @@ class ProceduralProfileStats:
     fast_success: int = 0
     expanded_success: int = 0
     solver_fallback_success: int = 0
+    expanded_prime_count: int = 0
     max_window_used: int = 0
     max_t_used: int = 0
 
@@ -137,6 +138,7 @@ def _build_attempts(initial_window: int, initial_t_max: int) -> list[tuple[int, 
 def _eval_procedural_identity(
     identity: Identity,
     n_value: int,
+    proc_heuristic: str = "off",
 ) -> tuple[tuple[int, int, int], str, int, int]:
     if identity.procedural_params is None:
         raise ValueError(f"Procedural identity {identity.name} has no procedural_params.")
@@ -146,6 +148,10 @@ def _eval_procedural_identity(
         raise ValueError(f"Unsupported anchor expression for procedural identity {identity.name}.")
 
     initial_window = int(identity.procedural_params.get("window", 8))
+    if proc_heuristic == "prime-window":
+        initial_window = 64 if sympy.isprime(n_value) else 8
+    elif proc_heuristic != "off":
+        raise ValueError(f"Unknown procedural heuristic: {proc_heuristic}")
     initial_t_max = int(identity.procedural_params.get("t_max", 256))
     if initial_window < 0 or initial_t_max < 0:
         raise ValueError(f"Procedural parameters must be non-negative for {identity.name}.")
@@ -227,13 +233,17 @@ def identity_applies(identity: Identity, n: int) -> bool:
     return _conditions_hold(identity, n)
 
 
-def eval_identity(identity: Identity, n: int) -> tuple[int, int, int] | None:
+def eval_identity(
+    identity: Identity,
+    n: int,
+    proc_heuristic: str = "off",
+) -> tuple[int, int, int] | None:
     """Evaluate one identity at ``n`` and validate exact equality."""
     if not identity_applies(identity, n):
         return None
 
     if identity.kind == "procedural":
-        triple, _, _, _ = _eval_procedural_identity(identity, n)
+        triple, _, _, _ = _eval_procedural_identity(identity, n, proc_heuristic=proc_heuristic)
         return triple
 
     x = _eval_expr_int(identity.x_form, n)
@@ -256,6 +266,7 @@ def profile_identities(
     n_min: int,
     n_max: int,
     top_k: int,
+    proc_heuristic: str = "off",
 ) -> ProceduralProfile:
     """Profile identity evaluation behavior over ``[n_min, n_max]``.
 
@@ -276,12 +287,16 @@ def profile_identities(
 
             stats.total_applications += 1
             if identity.kind != "procedural":
-                triple = eval_identity(identity, n_value)
+                triple = eval_identity(identity, n_value, proc_heuristic=proc_heuristic)
                 if triple is not None:
                     stats.fast_success += 1
                 continue
 
-            triple, path, window_used, t_used = _eval_procedural_identity(identity, n_value)
+            triple, path, window_used, t_used = _eval_procedural_identity(
+                identity,
+                n_value,
+                proc_heuristic=proc_heuristic,
+            )
             if triple is None:
                 continue
             stats.max_window_used = max(stats.max_window_used, window_used)
@@ -291,6 +306,8 @@ def profile_identities(
                 stats.fast_success += 1
             elif path == "expanded":
                 stats.expanded_success += 1
+                if sympy.isprime(n_value):
+                    stats.expanded_prime_count += 1
                 hard_cases.append(
                     HardCaseRecord(
                         identity=identity.name,
@@ -318,7 +335,12 @@ def profile_identities(
     )
 
 
-def verify_identity(identity: Identity, n_min: int, n_max: int) -> dict[str, object]:
+def verify_identity(
+    identity: Identity,
+    n_min: int,
+    n_max: int,
+    proc_heuristic: str = "off",
+) -> dict[str, object]:
     """Empirically verify identity over a closed range."""
     tested = 0
     passed = 0
@@ -332,7 +354,7 @@ def verify_identity(identity: Identity, n_min: int, n_max: int) -> dict[str, obj
             continue
 
         tested += 1
-        result = eval_identity(identity, n)
+        result = eval_identity(identity, n, proc_heuristic=proc_heuristic)
         if result is None:
             failed += 1
             if first_failure is None:
