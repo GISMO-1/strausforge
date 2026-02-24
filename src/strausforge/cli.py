@@ -20,6 +20,7 @@ from .identities import (
     eval_identity,
     identity_applies,
     identity_from_jsonl,
+    profile_identities,
     verify_identity,
 )
 from .loop import run_loop
@@ -244,6 +245,52 @@ def id_verify_cmd(
         console.print(
             f"identity={identity.name}, tested={stats['tested']}, "
             f"passed={stats['passed']}, failed={stats['failed']}"
+        )
+
+
+@app.command("profile")
+def profile_cmd(
+    identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
+    n_min: int = typer.Option(..., "--n-min", help="Minimum n."),
+    n_max: int = typer.Option(..., "--n-max", help="Maximum n."),
+    top: int = typer.Option(25, "--top", help="Number of hardest cases to print."),
+) -> None:
+    """Profile procedural hardness and fallback rates over a range.
+
+    Examples:
+        strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 2000000
+        strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 50000 --top 10
+    """
+    if n_min > n_max:
+        raise typer.BadParameter("Expected --n-min <= --n-max.")
+    if top <= 0:
+        raise typer.BadParameter("Expected --top > 0.")
+
+    identities = _load_identities(identity_file)
+    profile = profile_identities(identities=identities, n_min=n_min, n_max=n_max, top_k=top)
+
+    console.print("identity profile summary:")
+    for identity in identities:
+        stats = profile.per_identity[identity.name]
+        total = stats.total_applications
+        fast_pct = (100.0 * stats.fast_success / total) if total else 0.0
+        expanded_pct = (100.0 * stats.expanded_success / total) if total else 0.0
+        solver_pct = (100.0 * stats.solver_fallback_success / total) if total else 0.0
+        line = (
+            f"identity={identity.name}, total={total}, "
+            f"fast={stats.fast_success} ({fast_pct:.2f}%), "
+            f"expanded={stats.expanded_success} ({expanded_pct:.2f}%), "
+            f"solver_fallback={stats.solver_fallback_success} ({solver_pct:.2f}%)"
+        )
+        if identity.kind == "procedural":
+            line += f", max_window_used={stats.max_window_used}, max_t_used={stats.max_t_used}"
+        console.print(line)
+
+    console.print(f"top {len(profile.hardest_records)} hardest n records:")
+    for record in profile.hardest_records:
+        console.print(
+            f"identity={record.identity}, n={record.n}, path={record.path}, "
+            f"window_used={record.window_used}, t_used={record.t_used}"
         )
 
 
