@@ -1,78 +1,134 @@
 # strausforge
 
-`strausforge` is a lightweight computational and symbolic Python toolkit for exploring the Erdős–Straus conjecture by verifying and searching identities of the form `4/n = 1/x + 1/y + 1/z` with exact rational arithmetic.
+**Strausforge** is an experimental computational laboratory for the **Erdős–Straus conjecture**.
 
-The project now includes a faster deterministic solver path and JSONL certificates for reproducible runs, basic coverage reporting, and simple benchmarking views.
+The conjecture asks whether every integer `n ≥ 2` admits a decomposition
 
-## Install
+    4/n = 1/x + 1/y + 1/z
+
+in positive integers `x, y, z`.
+
+Rather than relying purely on brute-force search, this project studies the conjecture through **discovering, verifying, and measuring residue-class identities** — explicit parametric constructions that solve infinite families of integers at once.
+
+The guiding idea is simple:
+
+> turn numerical verification into structural evidence.
+
+Strausforge treats solutions not as isolated computations, but as mathematical objects that can be mined, classified, stress-tested, and reproduced.
+
+
+---
+
+## What this project actually does
+
+Strausforge combines three perspectives.
+
+### 1. Exact computation
+- deterministic search for solutions
+- exact rational verification
+- reproducible certificate generation
+- solver paths that remain fully auditable
+
+### 2. Identity discovery
+- detects congruence-class structure
+- fits parametric solution families
+- mines residue-class lemmas from verified data
+- performs empirical and symbolic validation
+
+### 3. Experimental number theory
+- measures where identities succeed or struggle
+- studies structurally “hard” integers
+- profiles solver pressure across ranges of `n`
+- visualizes expansion behavior (often concentrated on primes and squares)
+
+The system effectively acts as a **computational microscope** for the Erdős–Straus equation.
+
+
+---
+
+## Installation
 
 ```bash
 python -m pip install -e .
-```
+````
 
-## Usage
+---
 
-Check a specific identity:
+## Basic usage
+
+### Check a specific decomposition
 
 ```bash
 strausforge check --n 5 --x 2 --y 4 --z 20
 ```
 
-Sample output:
+Output:
 
-```text
+```
 PASS
 ```
 
-Search a single value:
+---
+
+### Search for a solution
+
+Single value:
 
 ```bash
 strausforge search --n 17
 ```
 
-Search a range with JSON lines output:
+Range search with JSON output:
 
 ```bash
 strausforge search --start 2 --end 10 --json
 ```
 
-Generate certificates for a range:
+---
+
+### Generate verification certificates
 
 ```bash
 strausforge certify --start 2 --end 100 --out certs.jsonl
 ```
 
-Print aggregate statistics from certificates:
+Each line records a verified solution together with solver metadata.
 
-```bash
-strausforge stats --in certs.jsonl
-```
-
-### Certificate format
-
-Each `certify` record is one JSON line with solver output and exact verification status.
-
-Example JSONL line:
+Example record:
 
 ```json
-{"elapsed_ms": 0.031, "method": "search_v1", "n": 17, "residue": {"n_mod_12": 5, "n_mod_24": 17, "n_mod_4": 1}, "verified": true, "x": 5, "y": 34, "z": 170}
+{"elapsed_ms":0.031,"method":"search_v1","n":17,"verified":true,"x":5,"y":34,"z":170}
 ```
 
-Certificates are *proof-carrying* in the practical sense that each line carries concrete `(x, y, z)` values plus a `verified` bit from exact rational equality checking. This is not a formal proof assistant artifact.
+Certificates are **proof-carrying in a practical computational sense**:
+every record includes explicit `(x, y, z)` values validated by exact rational equality.
 
+---
 
-## Identity Mining
+## Identity mining
 
-An **identity** in `strausforge` is a residue-class lemma: a parametric triple `(x(n), y(n), z(n))` that proves
-`4/n = 1/x + 1/y + 1/z` for values of `n` in selected congruence classes.
+An **identity** in strausforge is a residue-class lemma — a parametric construction
 
-Mining is deterministic (not ML):
-- load verified certificates,
-- group by modulus/residue,
-- fit small template families (affine, quotient-linear, bilinear),
-- apply built-in family templates (including `odd4_family` for `n ≡ 5 (mod 8)` and `odd4_mod12_r9` for `n ≡ 9 (mod 12)`, both within `n ≡ 1 (mod 4)`),
-- verify candidates empirically with exact rationals,
-- then attempt symbolic verification with SymPy.
+```
+x(n), y(n), z(n)
+```
+
+that proves
+
+```
+4/n = 1/x + 1/y + 1/z
+```
+
+for infinitely many integers `n`.
+
+Mining proceeds deterministically:
+
+1. load verified certificates
+2. group by modulus and residue class
+3. fit small parametric templates
+4. test candidate families empirically
+5. attempt symbolic verification
+6. store validated identities
 
 Run mining:
 
@@ -80,65 +136,138 @@ Run mining:
 strausforge mine --in certs.jsonl --out data/identities.jsonl --max-identities 50
 ```
 
+---
 
-Data-driven fit mining for hard residues:
+### Data-driven fitting for difficult residues
 
 ```bash
-strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 1 --out data/identities_fit.jsonl --max-identities 10
-strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 25 --out data/identities_fit.jsonl --max-identities 10
+strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 1 --out data/identities_fit.jsonl
+strausforge fit --in hard_48_r1_r25.jsonl --modulus 48 --residue 25 --out data/identities_fit.jsonl
 ```
 
-Check which identity applies at one `n`:
+These procedural identities target regions where classical templates weaken.
+
+---
+
+## Identity verification
+
+Check which identity applies:
 
 ```bash
 strausforge id-check --identity data/identities.jsonl --n 35
 ```
 
-Empirically verify all stored identities over a range:
+Verify identities across a range:
 
 ```bash
-strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500
+strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500000
 ```
 
-
-Hardness distribution export (CSV and optional plot):
-
-```bash
-strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 200000 --bin-size 10000 --out hardness.csv
-strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 200000 --only-proc --proc-heuristic prime-or-square-window --out hardness_proc.csv --plot hardness_proc.png
-```
-
-The hardness report bins evaluation outcomes and highlights where expanded procedural search occurs. In practice, expanded cases tend to concentrate on prime and square inputs, and the prime-or-square window heuristic typically reduces expansion pressure dramatically on mixed ranges.
-
-
-Coverage check example:
+Coverage across congruence classes:
 
 ```bash
 strausforge id-targets --identity data/identities.jsonl --modulus 48
 ```
 
+---
 
-## Autopilot Loop
+## Procedural heuristics
 
-Use the loop command to run one deterministic end-to-end mining iteration:
-1. compute uncovered residues at a chosen modulus,
-2. generate deterministic target `n` values,
-3. certify those examples,
-4. mine identities from those certificates,
-5. append newly discovered identities (including any built-in family templates that verify),
-6. recompute and print coverage delta.
+Strausforge includes deterministic evaluation heuristics that reduce search expansion pressure.
 
 Example:
 
 ```bash
-strausforge loop --identity data/identities.jsonl --modulus 24 --max-targets 4 --max-per-target 3 --max-new-identities 10 --enable-fit-fallback --fit-max-identities 10
+--proc-heuristic prime-or-square-window
 ```
 
-What to expect:
-- The command prints a before/after coverage summary and a delta line.
-- Certificates are written to `data/certs_targets_m<M>.jsonl`.
-- Some runs may add zero identities (exit code 1 in that case); increase range pressure via larger `--max-targets` and `--max-per-target`.
+Empirically, expanded evaluation cases concentrate heavily on:
 
-## Scope
+* primes
+* perfect squares
+* near-square structures
 
-This project provides a clean foundation for computational experimentation and symbolic verification around Erdős–Straus instances. It does **not** claim a proof or disproof of the conjecture.
+The heuristic widens initial evaluation windows exactly where arithmetic structure predicts difficulty.
+
+---
+
+## Hardness analysis
+
+Strausforge can measure where identities require expanded procedural evaluation.
+
+Export hardness statistics:
+
+```bash
+strausforge hardness \
+  --identity data/identities.jsonl \
+  --n-min 2 \
+  --n-max 2000000 \
+  --bin-size 5000 \
+  --out hardness.csv \
+  --plot hardness.png
+```
+
+Typical observations:
+
+* most integers resolve immediately via identities,
+* expansion pressure forms sparse spikes,
+* difficult regions correlate strongly with prime and square inputs.
+
+This converts large computational runs into analyzable experimental data.
+
+---
+
+## Autopilot discovery loop
+
+A deterministic end-to-end exploration cycle:
+
+```bash
+strausforge loop \
+  --identity data/identities.jsonl \
+  --modulus 24 \
+  --max-targets 4 \
+  --max-per-target 3 \
+  --max-new-identities 10 \
+  --enable-fit-fallback
+```
+
+The loop:
+
+1. finds uncovered residue classes
+2. generates targets
+3. certifies examples
+4. mines identities
+5. updates coverage
+6. reports structural progress
+
+Some iterations intentionally discover nothing — negative results are informative.
+
+---
+
+## What this project is (and is not)
+
+Strausforge is:
+
+* a reproducible experimental framework
+* a residue-class identity explorer
+* a computational number theory laboratory
+
+Strausforge is **not**:
+
+* a claimed proof of the Erdős–Straus conjecture
+* a heuristic black box
+* a machine learning system
+
+All results remain deterministic and auditable.
+
+---
+
+## Philosophy
+
+Large conjectures often resist direct proof but reveal structure under measurement.
+
+Strausforge explores a simple question:
+
+> How much of the Erdős–Straus conjecture can be explained by explicit arithmetic structure rather than brute force?
+
+The project is released openly so mathematicians, experimenters, and curious builders can push that boundary further.
