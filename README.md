@@ -1,3 +1,8 @@
+![Release](https://img.shields.io/github/v/release/GISMO-1/strausforge)
+![License](https://img.shields.io/github/license/GISMO-1/strausforge)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Reproducible](https://img.shields.io/badge/results-reproducible-brightgreen)
+
 # strausforge
 
 **Strausforge** is an experimental computational laboratory for the **Erdős–Straus conjecture**.
