@@ -1,9 +1,9 @@
-![Release](https://img.shields.io/github/v/release/GISMO-1/strausforge)
-![License](https://img.shields.io/github/license/GISMO-1/strausforge)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Reproducible](https://img.shields.io/badge/results-reproducible-brightgreen)
-![Experimental Number Theory](https://img.shields.io/badge/field-Experimental%20Number%20Theory-purple)
-![Range Tested](https://img.shields.io/badge/tested_range-n≤2,000,000-orange)
+![Field](https://img.shields.io/badge/field-Experimental%20Number%20Theory-purple)
+![Results](https://img.shields.io/badge/results-reproducible-brightgreen)
+![Range](https://img.shields.io/badge/tested%20range-n%20≤%202,000,000-orange)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18800225.svg)](https://doi.org/10.5281/zenodo.18800225)
 
 # strausforge
 
