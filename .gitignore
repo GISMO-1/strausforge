@@ -15,3 +15,6 @@ out.jsonl
 extract_hard.py
 data/certs_*.jsonl
 data/identities_fit*.jsonl
+# hardness experiment outputs
+hardness_*.png
+hardness_*.csv
