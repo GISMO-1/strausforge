@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import defaultdict
+from csv import DictWriter
 from fractions import Fraction
 from pathlib import Path
 from time import perf_counter
@@ -17,6 +19,7 @@ from .erdos_straus import check_identity, find_solution, find_solution_fast
 from .fit import fit_identities
 from .identities import (
     Identity,
+    _eval_procedural_identity,
     eval_identity,
     identity_applies,
     identity_from_jsonl,
@@ -29,6 +32,94 @@ from .mine import mine_identities
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
 _PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window"}
+
+
+def _is_prime_deterministic(n_value: int) -> bool:
+    """Return whether ``n_value`` is prime via deterministic trial division."""
+    if n_value <= 1:
+        return False
+    if n_value <= 3:
+        return True
+    if n_value % 2 == 0 or n_value % 3 == 0:
+        return False
+
+    divisor = 5
+    while divisor * divisor <= n_value:
+        if n_value % divisor == 0 or n_value % (divisor + 2) == 0:
+            return False
+        divisor += 6
+    return True
+
+
+def _is_square_value(n_value: int) -> bool:
+    """Return whether ``n_value`` is a perfect square."""
+    if n_value < 0:
+        return False
+    root = math.isqrt(n_value)
+    return root * root == n_value
+
+
+def _percentile_95(values: list[int]) -> int:
+    """Return deterministic ceil-index p95 for ``values``; return 0 for empty input."""
+    if not values:
+        return 0
+    ordered = sorted(values)
+    index = (95 * len(ordered) + 99) // 100 - 1
+    return ordered[max(0, min(index, len(ordered) - 1))]
+
+
+def _first_matching_identity(
+    identities: list[Identity],
+    n_value: int,
+    proc_heuristic: str,
+) -> tuple[Identity, tuple[int, int, int], str, int, int] | None:
+    """Return first successful identity evaluation for ``n_value`` with diagnostics."""
+    for identity in identities:
+        if not identity_applies(identity, n_value):
+            continue
+        if identity.kind == "procedural":
+            triple, path, window_used, t_used = _eval_procedural_identity(
+                identity,
+                n_value,
+                proc_heuristic=proc_heuristic,
+            )
+            return identity, triple, path, window_used, t_used
+
+        triple = eval_identity(identity, n_value, proc_heuristic=proc_heuristic)
+        if triple is None:
+            continue
+        return identity, triple, "fast", 0, 0
+
+    return None
+
+
+def _write_hardness_plot(rows: list[dict[str, float | int]], out_path: Path) -> None:
+    """Write hardness rate plot PNG using matplotlib."""
+    try:
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError as error:
+        raise typer.BadParameter(
+            "matplotlib is required for --plot; install it and rerun."
+        ) from error
+
+    x_values = [int(row["bin_start"]) for row in rows]
+    expanded_rate = [float(row["expanded_rate"]) for row in rows]
+    expanded_squares_rate = [
+        (float(row["expanded_squares"]) / float(row["total"])) if int(row["total"]) > 0 else 0.0
+        for row in rows
+    ]
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(x_values, expanded_rate, marker="o", label="expanded/total")
+    ax.plot(x_values, expanded_squares_rate, marker="x", label="expanded_squares/total")
+    ax.set_xlabel("bin_start")
+    ax.set_ylabel("rate")
+    ax.set_title("Identity hardness distribution")
+    ax.legend()
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
 
 
 @app.command()
@@ -343,6 +434,163 @@ def profile_cmd(
             f"identity={record.identity}, n={record.n}, path={record.path}, "
             f"window_used={record.window_used}, t_used={record.t_used}"
         )
+
+
+@app.command("hardness")
+def hardness_cmd(
+    identity_file: Path = typer.Option(..., "--identity", help="Identity JSONL file."),
+    n_min: int = typer.Option(..., "--n-min", help="Minimum n (inclusive)."),
+    n_max: int = typer.Option(..., "--n-max", help="Maximum n (inclusive)."),
+    bin_size: int = typer.Option(10000, "--bin-size", help="Bin width."),
+    out: Path = typer.Option(Path("hardness.csv"), "--out", help="Output CSV path."),
+    proc_heuristic: str = typer.Option(
+        "prime-or-square-window",
+        "--proc-heuristic",
+        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
+    ),
+    only_proc: bool = typer.Option(
+        False,
+        "--only-proc",
+        help="Analyze only procedural identities (fit_proc_*).",
+    ),
+    plot: Path | None = typer.Option(None, "--plot", help="Optional PNG plot path."),
+) -> None:
+    """Export binned hardness distribution for identity evaluation.
+
+    Examples:
+        strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000
+        strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000 \
+            --only-proc --out hardness_proc.csv
+        strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000 \
+            --plot hardness.png
+    """
+    if n_min > n_max:
+        raise typer.BadParameter("Expected --n-min <= --n-max.")
+    if bin_size <= 0:
+        raise typer.BadParameter("Expected --bin-size > 0.")
+    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
+        raise typer.BadParameter(
+            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
+        )
+
+    identities = _load_identities(identity_file)
+    if only_proc:
+        identities = [
+            identity
+            for identity in identities
+            if identity.kind == "procedural" and identity.name.startswith("fit_proc_")
+        ]
+
+    columns = [
+        "bin_start",
+        "bin_end",
+        "total",
+        "fast",
+        "expanded",
+        "solver_fallback",
+        "expanded_rate",
+        "prime_total",
+        "square_total",
+        "expanded_primes",
+        "expanded_squares",
+        "max_t_used",
+        "p95_t_used",
+        "max_window_used",
+    ]
+
+    bins: dict[int, dict[str, object]] = {}
+
+    for n_value in range(n_min, n_max + 1):
+        bin_start = ((n_value - n_min) // bin_size) * bin_size + n_min
+        bin_end = min(bin_start + bin_size - 1, n_max)
+        if bin_start not in bins:
+            bins[bin_start] = {
+                "bin_start": bin_start,
+                "bin_end": bin_end,
+                "total": 0,
+                "fast": 0,
+                "expanded": 0,
+                "solver_fallback": 0,
+                "prime_total": 0,
+                "square_total": 0,
+                "expanded_primes": 0,
+                "expanded_squares": 0,
+                "max_t_used": 0,
+                "max_window_used": 0,
+                "t_values": [],
+            }
+
+        entry = bins[bin_start]
+        is_prime = _is_prime_deterministic(n_value)
+        is_square = _is_square_value(n_value)
+        if is_prime:
+            entry["prime_total"] = int(entry["prime_total"]) + 1
+        if is_square:
+            entry["square_total"] = int(entry["square_total"]) + 1
+
+        matched = _first_matching_identity(
+            identities=identities,
+            n_value=n_value,
+            proc_heuristic=proc_heuristic,
+        )
+        if matched is None:
+            continue
+
+        _, _, path, window_used, t_used = matched
+        entry["total"] = int(entry["total"]) + 1
+        if path == "fast":
+            entry["fast"] = int(entry["fast"]) + 1
+        elif path == "expanded":
+            entry["expanded"] = int(entry["expanded"]) + 1
+            if is_prime:
+                entry["expanded_primes"] = int(entry["expanded_primes"]) + 1
+            if is_square:
+                entry["expanded_squares"] = int(entry["expanded_squares"]) + 1
+        else:
+            entry["solver_fallback"] = int(entry["solver_fallback"]) + 1
+
+        entry["max_t_used"] = max(int(entry["max_t_used"]), t_used)
+        entry["max_window_used"] = max(int(entry["max_window_used"]), window_used)
+        cast_values = entry["t_values"]
+        assert isinstance(cast_values, list)
+        cast_values.append(t_used)
+
+    rows: list[dict[str, float | int]] = []
+    for bin_start in sorted(bins):
+        entry = bins[bin_start]
+        total = int(entry["total"])
+        expanded = int(entry["expanded"])
+        t_values = entry["t_values"]
+        assert isinstance(t_values, list)
+        row: dict[str, float | int] = {
+            "bin_start": int(entry["bin_start"]),
+            "bin_end": int(entry["bin_end"]),
+            "total": total,
+            "fast": int(entry["fast"]),
+            "expanded": expanded,
+            "solver_fallback": int(entry["solver_fallback"]),
+            "expanded_rate": (float(expanded) / float(total)) if total > 0 else 0.0,
+            "prime_total": int(entry["prime_total"]),
+            "square_total": int(entry["square_total"]),
+            "expanded_primes": int(entry["expanded_primes"]),
+            "expanded_squares": int(entry["expanded_squares"]),
+            "max_t_used": int(entry["max_t_used"]),
+            "p95_t_used": _percentile_95([int(item) for item in t_values]),
+            "max_window_used": int(entry["max_window_used"]),
+        }
+        rows.append(row)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8", newline="") as handle:
+        writer = DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+    if plot is not None:
+        _write_hardness_plot(rows, plot)
+
+    console.print(f"summary: bins={len(rows)}, out={out}")
 
 
 def _validate_positive_modulus(value: int) -> int:

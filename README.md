@@ -101,6 +101,16 @@ strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500
 ```
 
 
+Hardness distribution export (CSV and optional plot):
+
+```bash
+strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 200000 --bin-size 10000 --out hardness.csv
+strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 200000 --only-proc --proc-heuristic prime-or-square-window --out hardness_proc.csv --plot hardness_proc.png
+```
+
+The hardness report bins evaluation outcomes and highlights where expanded procedural search occurs. In practice, expanded cases tend to concentrate on prime and square inputs, and the prime-or-square window heuristic typically reduces expansion pressure dramatically on mixed ranges.
+
+
 Coverage check example:
 
 ```bash
