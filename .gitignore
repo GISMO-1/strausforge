@@ -15,6 +15,9 @@ out.jsonl
 extract_hard.py
 data/certs_*.jsonl
 data/identities_fit*.jsonl
-# hardness experiment outputs
+# ignore generated hardness runs by default
 hardness_*.png
 hardness_*.csv
+
+# but allow curated examples under experiments/
+!experiments/**
