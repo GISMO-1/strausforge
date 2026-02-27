@@ -2,6 +2,8 @@
 ![License](https://img.shields.io/github/license/GISMO-1/strausforge)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Reproducible](https://img.shields.io/badge/results-reproducible-brightgreen)
+![Experimental Number Theory](https://img.shields.io/badge/field-Experimental%20Number%20Theory-purple)
+![Range Tested](https://img.shields.io/badge/tested_range-n≤2,000,000-orange)
 
 # strausforge
 
