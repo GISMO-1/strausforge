@@ -1,5 +1,6 @@
 import json
 import re
+from csv import DictReader
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -259,6 +260,122 @@ def test_id_check_proc_heuristic_off_matches_default_output() -> None:
     assert baseline.exit_code == 0
     assert explicit_off.exit_code == 0
     assert baseline.stdout == explicit_off.stdout
+
+
+def test_hardness_exports_csv_with_expected_columns(tmp_path: Path) -> None:
+    out_file = tmp_path / "hardness.csv"
+    result = runner.invoke(
+        app,
+        [
+            "hardness",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "35000",
+            "--n-max",
+            "36000",
+            "--bin-size",
+            "500",
+            "--only-proc",
+            "--out",
+            str(out_file),
+        ],
+    )
+    assert result.exit_code == 0
+    assert out_file.exists()
+
+    with out_file.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(DictReader(handle))
+
+    assert rows
+    expected_columns = {
+        "bin_start",
+        "bin_end",
+        "total",
+        "fast",
+        "expanded",
+        "solver_fallback",
+        "expanded_rate",
+        "prime_total",
+        "square_total",
+        "expanded_primes",
+        "expanded_squares",
+        "max_t_used",
+        "p95_t_used",
+        "max_window_used",
+    }
+    assert set(rows[0].keys()) == expected_columns
+
+    for row in rows:
+        total = int(row["total"])
+        fast = int(row["fast"])
+        expanded = int(row["expanded"])
+        solver_fallback = int(row["solver_fallback"])
+        assert total == fast + expanded + solver_fallback
+
+
+def test_hardness_prime_or_square_heuristic_reduces_expanded_rate(tmp_path: Path) -> None:
+    off_file = tmp_path / "hardness_off.csv"
+    posw_file = tmp_path / "hardness_posw.csv"
+
+    off_result = runner.invoke(
+        app,
+        [
+            "hardness",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "35000",
+            "--n-max",
+            "36000",
+            "--bin-size",
+            "500",
+            "--only-proc",
+            "--proc-heuristic",
+            "off",
+            "--out",
+            str(off_file),
+        ],
+    )
+    posw_result = runner.invoke(
+        app,
+        [
+            "hardness",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "35000",
+            "--n-max",
+            "36000",
+            "--bin-size",
+            "500",
+            "--only-proc",
+            "--proc-heuristic",
+            "prime-or-square-window",
+            "--out",
+            str(posw_file),
+        ],
+    )
+
+    assert off_result.exit_code == 0
+    assert posw_result.exit_code == 0
+
+    with off_file.open("r", encoding="utf-8", newline="") as handle:
+        off_rows = list(DictReader(handle))
+    with posw_file.open("r", encoding="utf-8", newline="") as handle:
+        posw_rows = list(DictReader(handle))
+
+    assert len(off_rows) == len(posw_rows)
+    off_expanded = sum(int(row["expanded"]) for row in off_rows)
+    posw_expanded = sum(int(row["expanded"]) for row in posw_rows)
+    assert off_expanded > 0
+    assert posw_expanded <= off_expanded
+
+    off_total = sum(int(row["total"]) for row in off_rows)
+    posw_total = sum(int(row["total"]) for row in posw_rows)
+    off_rate = off_expanded / off_total
+    posw_rate = posw_expanded / posw_total
+    assert posw_rate <= off_rate
 
 
 def test_profile_proc_heuristic_prime_window_reduces_expanded_count() -> None:
