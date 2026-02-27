@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+title: "strausforge"
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Burns
+    given-names: Michael
+repository-code: https://github.com/GISMO-1/strausforge
+doi: 10.5281/zenodo.18800225
+license: Apache-2.0
+version: v0.1
+date-released: 2026-02-27
