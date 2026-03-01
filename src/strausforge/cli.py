@@ -458,7 +458,11 @@ def hardness_cmd(
     export_expanded: Path | None = typer.Option(
         None,
         "--export-expanded",
-        help="Optional JSONL path to stream expanded-case records.",
+        help=(
+            "Optional JSONL path to stream expanded-case records. "
+            "CSV columns: escalated=non-fast deterministic window escalation; "
+            "expanded_exported=records actually emitted to this JSONL."
+        ),
     ),
     progress: bool = typer.Option(
         False,
@@ -513,6 +517,8 @@ def hardness_cmd(
         write_hardness_plot(rows, plot)
 
     console.print(f"summary: bins={summary['bins']}, out={out}")
+    if export_expanded is not None and int(summary["expanded_exported_total"]) == 0:
+        console.print("export-expanded: 0 records emitted (file empty)")
 
 
 @app.command("expanded-stats")

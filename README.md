@@ -259,6 +259,10 @@ The heuristic widens initial evaluation windows exactly where arithmetic structu
 
 Strausforge can measure where identities require expanded procedural evaluation.
 
+The hardness CSV includes:
+* `escalated`: non-fast procedural evaluations that needed deterministic window escalation.
+* `expanded_exported`: expanded-case records actually emitted to `--export-expanded` JSONL.
+
 Export hardness statistics:
 
 ```bash
