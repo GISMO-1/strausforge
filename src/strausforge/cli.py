@@ -36,6 +36,51 @@ console = Console()
 _PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window"}
 
 
+class _ProgressPrinter:
+    """Low-noise single-line progress printer for long-running CLI loops."""
+
+    def __init__(self, *, enabled: bool, total: int, label: str) -> None:
+        self.enabled = enabled
+        self.total = max(total, 1)
+        self.label = label
+        self._started = perf_counter()
+        self._last_render = 0.0
+
+    def update(self, completed: int) -> None:
+        """Render in-place progress output with percent and ETA."""
+        if not self.enabled:
+            return
+
+        now = perf_counter()
+        capped = max(0, min(completed, self.total))
+        should_render = capped == self.total or (now - self._last_render) >= 0.25
+        if not should_render:
+            return
+
+        elapsed = max(now - self._started, 1e-9)
+        pct = (100.0 * capped) / self.total
+        eta_seconds = int((self.total - capped) * (elapsed / capped)) if capped > 0 else 0
+        eta_text = _format_eta(eta_seconds)
+        message = (
+            f"\r{self.label}: {pct:6.2f}% "
+            f"({capped}/{self.total}) ETA {eta_text}"
+        )
+        sys.stderr.write(message)
+        sys.stderr.flush()
+        self._last_render = now
+
+        if capped == self.total:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
+
+
+def _format_eta(seconds: int) -> str:
+    """Format ETA seconds as ``HH:MM:SS``."""
+    hours, rem = divmod(max(seconds, 0), 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
 @app.command("gui")
 def gui_cmd(
     identity_file: Path = typer.Option(
@@ -410,6 +455,11 @@ def profile_cmd(
         "--proc-heuristic",
         help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
     ),
+    progress: bool = typer.Option(
+        False,
+        "--progress/--no-progress",
+        help="Show in-place progress with percent and ETA.",
+    ),
 ) -> None:
     """Profile procedural hardness and fallback rates over a range.
 
@@ -431,12 +481,24 @@ def profile_cmd(
         )
 
     identities = _load_identities(identity_file)
+    progress_printer = _ProgressPrinter(
+        enabled=progress,
+        total=len(identities) * (n_max - n_min + 1),
+        label="profile",
+    )
+
+    def _on_progress(completed: int, total: int) -> None:
+        # ``total`` is provided by the core callback contract for clarity.
+        del total
+        progress_printer.update(completed)
+
     profile = profile_identities(
         identities=identities,
         n_min=n_min,
         n_max=n_max,
         top_k=top,
         proc_heuristic=proc_heuristic,
+        progress_callback=_on_progress if progress else None,
     )
 
     console.print("identity profile summary:")
@@ -491,6 +553,11 @@ def hardness_cmd(
         "--export-expanded",
         help="Optional JSONL path to stream expanded-case records.",
     ),
+    progress: bool = typer.Option(
+        False,
+        "--progress/--no-progress",
+        help="Show in-place progress with percent and ETA.",
+    ),
 ) -> None:
     """Export binned hardness distribution for identity evaluation.
 
@@ -538,6 +605,11 @@ def hardness_cmd(
     ]
 
     bins: dict[int, dict[str, object]] = {}
+    progress_printer = _ProgressPrinter(
+        enabled=progress,
+        total=n_max - n_min + 1,
+        label="hardness",
+    )
     export_handle = None
     try:
         if export_expanded is not None:
@@ -545,6 +617,7 @@ def hardness_cmd(
             export_handle = export_expanded.open("w", encoding="utf-8")
 
         for n_value in range(n_min, n_max + 1):
+            progress_printer.update(n_value - n_min + 1)
             bin_start = ((n_value - n_min) // bin_size) * bin_size + n_min
             bin_end = min(bin_start + bin_size - 1, n_max)
             if bin_start not in bins:
@@ -655,6 +728,80 @@ def hardness_cmd(
         _write_hardness_plot(rows, plot)
 
     console.print(f"summary: bins={len(rows)}, out={out}")
+
+
+@app.command("expanded-stats")
+def expanded_stats_cmd(
+    in_file: Path = typer.Option(..., "--in", help="Expanded JSONL input path."),
+    out_file: Path | None = typer.Option(None, "--out", help="Optional report output path."),
+    modulus: int = typer.Option(48, "--mod", help="Residue histogram modulus."),
+    top: int = typer.Option(20, "--top", help="Maximum identities to report."),
+) -> None:
+    """Summarize exported expanded-case JSONL from ``hardness --export-expanded``.
+
+    Examples:
+        strausforge expanded-stats --in expanded.jsonl
+        strausforge expanded-stats --in expanded.jsonl --out expanded_stats.txt --mod 96 --top 15
+    """
+    if modulus <= 0:
+        raise typer.BadParameter("Expected --mod > 0.")
+    if top <= 0:
+        raise typer.BadParameter("Expected --top > 0.")
+
+    total = 0
+    prime_count = 0
+    square_count = 0
+    residue_counts: dict[int, int] = defaultdict(int)
+    identity_counts: dict[str, int] = defaultdict(int)
+
+    with in_file.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            payload = json.loads(stripped)
+            n_value = int(payload["n"])
+            identity_name = str(payload["identity"])
+            is_prime = bool(payload["is_prime"])
+            is_square = bool(payload["is_square"])
+
+            total += 1
+            if is_prime:
+                prime_count += 1
+            if is_square:
+                square_count += 1
+            residue_counts[n_value % modulus] += 1
+            identity_counts[identity_name] += 1
+
+    lines: list[str] = [
+        f"total_expanded_records: {total}",
+        (
+            f"is_prime: {prime_count} "
+            f"({((100.0 * prime_count / total) if total else 0.0):.2f}%)"
+        ),
+        (
+            f"is_square: {square_count} "
+            f"({((100.0 * square_count / total) if total else 0.0):.2f}%)"
+        ),
+        f"residue_histogram_mod_{modulus}:",
+    ]
+
+    for residue in sorted(residue_counts):
+        lines.append(f"  residue={residue}: count={residue_counts[residue]}")
+
+    lines.append(f"top_identities (top={top}):")
+    sorted_identities = sorted(identity_counts.items(), key=lambda item: (-item[1], item[0]))[:top]
+    for identity_name, count in sorted_identities:
+        lines.append(f"  identity={identity_name}: count={count}")
+
+    report_text = "\n".join(lines)
+    if out_file is None:
+        console.print(report_text)
+        return
+
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(report_text + "\n", encoding="utf-8")
+    console.print(f"summary: out={out_file}")
 
 
 def _validate_positive_modulus(value: int) -> int:

@@ -123,3 +123,16 @@ def test_prime_or_square_window_heuristic_turns_known_prime_square_into_fast_pat
     assert baseline_window == 64
     assert heuristic_path == "fast"
     assert heuristic_window == 64
+
+
+def test_symbolic_expression_cache_preserves_eval_results() -> None:
+    identities = _load_identities(Path("data/identities.jsonl"))
+    symbolic = next(identity for identity in identities if identity.kind == "symbolic")
+
+    sample_n = [n for n in range(2, 200) if n % symbolic.modulus in set(symbolic.residues)][:8]
+    assert sample_n
+
+    baseline = [eval_identity(symbolic, n) for n in sample_n]
+    repeated = [eval_identity(symbolic, n) for n in sample_n]
+
+    assert baseline == repeated
