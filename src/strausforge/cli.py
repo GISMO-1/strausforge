@@ -61,10 +61,7 @@ class _ProgressPrinter:
         pct = (100.0 * capped) / self.total
         eta_seconds = int((self.total - capped) * (elapsed / capped)) if capped > 0 else 0
         eta_text = _format_eta(eta_seconds)
-        message = (
-            f"\r{self.label}: {pct:6.2f}% "
-            f"({capped}/{self.total}) ETA {eta_text}"
-        )
+        message = f"\r{self.label}: {pct:6.2f}% ({capped}/{self.total}) ETA {eta_text}"
         sys.stderr.write(message)
         sys.stderr.flush()
         self._last_render = now
@@ -775,14 +772,8 @@ def expanded_stats_cmd(
 
     lines: list[str] = [
         f"total_expanded_records: {total}",
-        (
-            f"is_prime: {prime_count} "
-            f"({((100.0 * prime_count / total) if total else 0.0):.2f}%)"
-        ),
-        (
-            f"is_square: {square_count} "
-            f"({((100.0 * square_count / total) if total else 0.0):.2f}%)"
-        ),
+        (f"is_prime: {prime_count} ({((100.0 * prime_count / total) if total else 0.0):.2f}%)"),
+        (f"is_square: {square_count} ({((100.0 * square_count / total) if total else 0.0):.2f}%)"),
         f"residue_histogram_mod_{modulus}:",
     ]
 

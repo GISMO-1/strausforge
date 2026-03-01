@@ -1,0 +1,2 @@
+{"identity": "fit_proc_m48_r1", "is_prime": true, "is_square": false, "n": 18481, "path": "expanded", "proc_heuristic": "off", "t_used": 3, "window_used": 64}
+{"identity": "fit_proc_m48_r1", "is_prime": true, "is_square": false, "n": 35809, "path": "expanded", "proc_heuristic": "off", "t_used": 0, "window_used": 64}
