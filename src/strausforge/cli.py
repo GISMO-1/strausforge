@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
+import sys
 from collections import defaultdict
 from csv import DictWriter
 from fractions import Fraction
@@ -32,6 +34,36 @@ from .mine import mine_identities
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
 _PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window"}
+
+
+@app.command("gui")
+def gui_cmd(
+    identity_file: Path = typer.Option(
+        Path("data/identities.jsonl"),
+        "--identity",
+        help="Identity JSONL path to preload in the GUI.",
+    ),
+) -> None:
+    """Launch the Streamlit GUI.
+
+    Examples:
+        strausforge gui
+        strausforge gui --identity data/identities.jsonl
+    """
+    app_path = Path(__file__).with_name("gui_app.py")
+    command = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app_path),
+        "--",
+        "--identity",
+        str(identity_file),
+    ]
+    completed = subprocess.run(command, check=False)
+    if completed.returncode != 0:
+        raise typer.Exit(code=completed.returncode)
 
 
 def _is_prime_deterministic(n_value: int) -> bool:

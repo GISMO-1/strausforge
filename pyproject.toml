@@ -19,6 +19,10 @@ dev = [
   "pytest>=8.0.0",
   "ruff>=0.6.0",
 ]
+gui = [
+  "streamlit>=1.37.0",
+  "matplotlib>=3.8.0",
+]
 
 [project.scripts]
 strausforge = "strausforge.cli:app"

@@ -55,9 +55,54 @@ The system effectively acts as a **computational microscope** for the Erdős–S
 
 ## Installation
 
+Core CLI install:
+
 ```bash
 python -m pip install -e .
-````
+```
+
+Developer install (tests + lint):
+
+```bash
+python -m pip install -e '.[dev]'
+```
+
+GUI install (Streamlit app):
+
+```bash
+pip install -e ".[gui]"
+```
+
+---
+
+## GUI
+
+Strausforge includes a Streamlit interface for non-developers (math exploration workflow).
+
+Run:
+
+```bash
+strausforge gui
+```
+
+Optional identity preload path:
+
+```bash
+strausforge gui --identity data/identities.jsonl
+```
+
+---
+
+## CI / test notes
+
+- Core test suite is designed to pass with dev dependencies only (`.[dev]`).
+- GUI smoke import tests auto-skip unless Streamlit is installed.
+- Typical local check:
+
+```bash
+python -m pip install -e '.[dev]'
+pytest
+```
 
 ---
 
