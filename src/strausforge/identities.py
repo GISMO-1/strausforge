@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from fractions import Fraction
+from functools import lru_cache
 from typing import Any
 
 import sympy
@@ -77,6 +79,7 @@ class ProceduralProfile:
 
 
 _PATH_SEVERITY: dict[str, int] = {"fast": 0, "expanded": 1, "solver": 2}
+_N_SYMBOL = sympy.Symbol("n", integer=True)
 
 
 def _hard_case_sort_key(item: HardCaseRecord) -> tuple[int, int, int, int, str]:
@@ -197,9 +200,8 @@ def _eval_procedural_identity(
 
 
 def _eval_expr_int(expression: str, n_value: int) -> int | None:
-    n = sympy.Symbol("n", integer=True)
-    expr = sympy.sympify(expression, locals={"n": n})
-    value = sympy.simplify(expr.subs({n: n_value}))
+    expr = _sympify_with_n(expression)
+    value = sympy.simplify(expr.subs({_N_SYMBOL: n_value}))
     if value.is_integer is False:
         return None
     if value.is_Rational:
@@ -227,16 +229,27 @@ def _is_square(n_value: int) -> bool:
 def _conditions_hold(identity: Identity, n_value: int) -> bool:
     if identity.modulus <= 0:
         return False
-    if n_value % identity.modulus not in set(identity.residues):
+    if n_value % identity.modulus not in _residue_set(tuple(identity.residues)):
         return False
 
-    n = sympy.Symbol("n", integer=True)
     for condition in identity.conditions:
-        condition_expr = sympy.sympify(condition, locals={"n": n})
-        evaluated = condition_expr.subs({n: n_value})
+        condition_expr = _sympify_with_n(condition)
+        evaluated = condition_expr.subs({_N_SYMBOL: n_value})
         if bool(evaluated) is False:
             return False
     return True
+
+
+@lru_cache(maxsize=1024)
+def _sympify_with_n(expression: str) -> sympy.Expr:
+    """Parse ``expression`` with a cached integer ``n`` symbol."""
+    return sympy.sympify(expression, locals={"n": _N_SYMBOL})
+
+
+@lru_cache(maxsize=1024)
+def _residue_set(residues: tuple[int, ...]) -> frozenset[int]:
+    """Return cached residue set for identity applicability checks."""
+    return frozenset(int(item) for item in residues)
 
 
 def identity_applies(identity: Identity, n: int) -> bool:
@@ -280,6 +293,7 @@ def profile_identities(
     n_max: int,
     top_k: int,
     proc_heuristic: str = "off",
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> ProceduralProfile:
     """Profile identity evaluation behavior over ``[n_min, n_max]``.
 
@@ -292,9 +306,14 @@ def profile_identities(
     }
     hard_cases: list[HardCaseRecord] = []
 
+    total_steps = len(identities) * (n_max - n_min + 1)
+    completed_steps = 0
     for identity in identities:
         stats = per_identity[identity.name]
         for n_value in range(n_min, n_max + 1):
+            completed_steps += 1
+            if progress_callback is not None:
+                progress_callback(completed_steps, total_steps)
             if not identity_applies(identity, n_value):
                 continue
 

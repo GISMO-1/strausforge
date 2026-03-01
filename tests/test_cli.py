@@ -572,3 +572,124 @@ def test_profile_proc_heuristic_prime_or_square_window_handles_prime_square_case
     assert "fast=1" in heuristic_line
     assert "expanded=0" in heuristic_line
     assert "expanded_squares=0/0" in heuristic_clean
+
+
+def test_hardness_progress_flag_preserves_csv_and_expanded_outputs(tmp_path: Path) -> None:
+    baseline_csv = tmp_path / "hardness_baseline.csv"
+    baseline_expanded = tmp_path / "expanded_baseline.jsonl"
+    progress_csv = tmp_path / "hardness_progress.csv"
+    progress_expanded = tmp_path / "expanded_progress.jsonl"
+
+    common_args = [
+        "hardness",
+        "--identity",
+        "data/identities.jsonl",
+        "--n-min",
+        "35000",
+        "--n-max",
+        "35500",
+        "--bin-size",
+        "250",
+        "--only-proc",
+        "--proc-heuristic",
+        "off",
+    ]
+
+    baseline_result = runner.invoke(
+        app,
+        common_args + ["--out", str(baseline_csv), "--export-expanded", str(baseline_expanded)],
+    )
+    progress_result = runner.invoke(
+        app,
+        common_args
+        + [
+            "--out",
+            str(progress_csv),
+            "--export-expanded",
+            str(progress_expanded),
+            "--progress",
+        ],
+    )
+
+    assert baseline_result.exit_code == 0
+    assert progress_result.exit_code == 0
+    assert baseline_csv.read_text(encoding="utf-8") == progress_csv.read_text(encoding="utf-8")
+    assert baseline_expanded.read_text(encoding="utf-8") == progress_expanded.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_profile_progress_flag_succeeds() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "profile",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "2",
+            "--n-max",
+            "500",
+            "--top",
+            "5",
+            "--progress",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "identity profile summary:" in result.stdout
+
+
+def test_expanded_stats_reports_expected_counts(tmp_path: Path) -> None:
+    fixture_path = Path("tests/fixtures/expanded_small.jsonl")
+    out_path = tmp_path / "expanded_stats.txt"
+
+    result = runner.invoke(
+        app,
+        [
+            "expanded-stats",
+            "--in",
+            str(fixture_path),
+            "--out",
+            str(out_path),
+            "--mod",
+            "48",
+            "--top",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0
+    report = out_path.read_text(encoding="utf-8")
+    assert "total_expanded_records: 4" in report
+    assert "is_prime: 1 (25.00%)" in report
+    assert "is_square: 1 (25.00%)" in report
+    assert "residue=1: count=2" in report
+    assert "residue=2: count=1" in report
+    assert "residue=16: count=1" in report
+    assert "residue=49: count=1" not in report
+    assert "identity=fit_proc_m48_r1: count=2" in report
+    assert "identity=fit_proc_m48_r25: count=2" in report
+
+
+def test_expanded_stats_stdout_is_deterministic() -> None:
+    fixture_path = Path("tests/fixtures/expanded_small.jsonl")
+    args = ["expanded-stats", "--in", str(fixture_path), "--mod", "48", "--top", "20"]
+
+    first = runner.invoke(app, args)
+    second = runner.invoke(app, args)
+
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    assert first.stdout == second.stdout
+
+
+def test_expanded_stats_rejects_invalid_parameters() -> None:
+    fixture_path = Path("tests/fixtures/expanded_small.jsonl")
+
+    bad_mod = runner.invoke(app, ["expanded-stats", "--in", str(fixture_path), "--mod", "0"])
+    bad_top = runner.invoke(app, ["expanded-stats", "--in", str(fixture_path), "--top", "0"])
+
+    assert bad_mod.exit_code != 0
+    assert "Expected --mod > 0." in _strip_ansi(bad_mod.output)
+    assert bad_top.exit_code != 0
+    assert "Expected --top > 0." in _strip_ansi(bad_top.output)

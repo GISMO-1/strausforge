@@ -108,6 +108,15 @@ pytest
 
 ## Basic usage
 
+
+Module entrypoint also works:
+
+```bash
+python -m strausforge --help
+python -m strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 2000 --out hardness.csv
+```
+
+
 ### Check a specific decomposition
 
 ```bash
@@ -256,7 +265,14 @@ strausforge hardness \
   --n-max 2000000 \
   --bin-size 5000 \
   --out hardness.csv \
-  --plot hardness.png
+  --plot hardness.png \
+  --progress
+```
+
+Summarize expanded-case exports without loading the whole file in memory:
+
+```bash
+strausforge expanded-stats --in expanded.jsonl --mod 48 --top 20
 ```
 
 Typical observations:
