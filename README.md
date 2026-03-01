@@ -2,7 +2,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Field](https://img.shields.io/badge/field-Experimental%20Number%20Theory-purple)
 ![Results](https://img.shields.io/badge/results-reproducible-brightgreen)
-![Range](https://img.shields.io/badge/tested%20range-n%20≤%202,000,000-orange)
+![Range](https://img.shields.io/badge/tested%20range-n%20≥%2022M%20(spot%20windows)-orange)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18800225.svg)](https://doi.org/10.5281/zenodo.18800225)
 
 # strausforge
