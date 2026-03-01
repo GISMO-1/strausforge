@@ -469,8 +469,6 @@ def test_hardness_export_expanded_count_matches_bin_totals(tmp_path: Path) -> No
     assert len(expanded_lines) == expanded_exported_total
 
 
-
-
 def test_hardness_export_expanded_reports_empty_file_when_no_records(tmp_path: Path) -> None:
     out_file = tmp_path / "hardness.csv"
     expanded_file = tmp_path / "expanded.jsonl"
@@ -506,6 +504,7 @@ def test_hardness_export_expanded_reports_empty_file_when_no_records(tmp_path: P
 
     assert rows
     assert sum(int(row["expanded_exported"]) for row in rows) == 0
+
 
 def test_hardness_export_expanded_is_deterministic_across_runs(tmp_path: Path) -> None:
     out_file_a = tmp_path / "hardness_a.csv"
