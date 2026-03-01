@@ -1,23 +1,45 @@
+# Python cache
 __pycache__/
 *.py[cod]
 *.egg-info/
+
+# Virtual env
 .venv/
+
+# Tooling cache
 .pytest_cache/
 .ruff_cache/
 .coverage
 htmlcov/
-# generated outputs / local experiments
+
+# =========================================
+# Generated experiment artifacts
+# =========================================
+
+hardness_*.png
+hardness_*.csv
+expanded_*.jsonl
+cli_*.jsonl
+cli_*.csv
+small_*.jsonl
+small_*.csv
+
+# =========================================
+# Large generated datasets (if regenerable)
+# =========================================
+
 hard.jsonl
 hard_all_lines.jsonl
 hard_all_lines.utf8.jsonl
 hard_48_r1_r25.jsonl
 out.jsonl
-extract_hard.py
+
+# =========================================
+# Data variants
+# =========================================
+
 data/certs_*.jsonl
 data/identities_fit*.jsonl
-# ignore generated hardness runs by default
-hardness_*.png
-hardness_*.csv
 
-# but allow curated examples under experiments/
+# Allow curated examples under experiments/
 !experiments/**
