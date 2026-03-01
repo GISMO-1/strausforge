@@ -486,6 +486,11 @@ def hardness_cmd(
         help="Analyze only procedural identities (fit_proc_*).",
     ),
     plot: Path | None = typer.Option(None, "--plot", help="Optional PNG plot path."),
+    export_expanded: Path | None = typer.Option(
+        None,
+        "--export-expanded",
+        help="Optional JSONL path to stream expanded-case records.",
+    ),
 ) -> None:
     """Export binned hardness distribution for identity evaluation.
 
@@ -495,6 +500,8 @@ def hardness_cmd(
             --only-proc --out hardness_proc.csv
         strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000 \
             --plot hardness.png
+        strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000 \
+            --export-expanded expanded.jsonl
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
@@ -531,61 +538,86 @@ def hardness_cmd(
     ]
 
     bins: dict[int, dict[str, object]] = {}
+    export_handle = None
+    try:
+        if export_expanded is not None:
+            export_expanded.parent.mkdir(parents=True, exist_ok=True)
+            export_handle = export_expanded.open("w", encoding="utf-8")
 
-    for n_value in range(n_min, n_max + 1):
-        bin_start = ((n_value - n_min) // bin_size) * bin_size + n_min
-        bin_end = min(bin_start + bin_size - 1, n_max)
-        if bin_start not in bins:
-            bins[bin_start] = {
-                "bin_start": bin_start,
-                "bin_end": bin_end,
-                "total": 0,
-                "fast": 0,
-                "expanded": 0,
-                "solver_fallback": 0,
-                "prime_total": 0,
-                "square_total": 0,
-                "expanded_primes": 0,
-                "expanded_squares": 0,
-                "max_t_used": 0,
-                "max_window_used": 0,
-                "t_values": [],
-            }
+        for n_value in range(n_min, n_max + 1):
+            bin_start = ((n_value - n_min) // bin_size) * bin_size + n_min
+            bin_end = min(bin_start + bin_size - 1, n_max)
+            if bin_start not in bins:
+                bins[bin_start] = {
+                    "bin_start": bin_start,
+                    "bin_end": bin_end,
+                    "total": 0,
+                    "fast": 0,
+                    "expanded": 0,
+                    "solver_fallback": 0,
+                    "prime_total": 0,
+                    "square_total": 0,
+                    "expanded_primes": 0,
+                    "expanded_squares": 0,
+                    "max_t_used": 0,
+                    "max_window_used": 0,
+                    "t_values": [],
+                }
 
-        entry = bins[bin_start]
-        is_prime = _is_prime_deterministic(n_value)
-        is_square = _is_square_value(n_value)
-        if is_prime:
-            entry["prime_total"] = int(entry["prime_total"]) + 1
-        if is_square:
-            entry["square_total"] = int(entry["square_total"]) + 1
-
-        matched = _first_matching_identity(
-            identities=identities,
-            n_value=n_value,
-            proc_heuristic=proc_heuristic,
-        )
-        if matched is None:
-            continue
-
-        _, _, path, window_used, t_used = matched
-        entry["total"] = int(entry["total"]) + 1
-        if path == "fast":
-            entry["fast"] = int(entry["fast"]) + 1
-        elif path == "expanded":
-            entry["expanded"] = int(entry["expanded"]) + 1
+            entry = bins[bin_start]
+            is_prime = _is_prime_deterministic(n_value)
+            is_square = _is_square_value(n_value)
             if is_prime:
-                entry["expanded_primes"] = int(entry["expanded_primes"]) + 1
+                entry["prime_total"] = int(entry["prime_total"]) + 1
             if is_square:
-                entry["expanded_squares"] = int(entry["expanded_squares"]) + 1
-        else:
-            entry["solver_fallback"] = int(entry["solver_fallback"]) + 1
+                entry["square_total"] = int(entry["square_total"]) + 1
 
-        entry["max_t_used"] = max(int(entry["max_t_used"]), t_used)
-        entry["max_window_used"] = max(int(entry["max_window_used"]), window_used)
-        cast_values = entry["t_values"]
-        assert isinstance(cast_values, list)
-        cast_values.append(t_used)
+            matched = _first_matching_identity(
+                identities=identities,
+                n_value=n_value,
+                proc_heuristic=proc_heuristic,
+            )
+            if matched is None:
+                continue
+
+            identity, _, path, window_used, t_used = matched
+            entry["total"] = int(entry["total"]) + 1
+            if path == "fast":
+                entry["fast"] = int(entry["fast"]) + 1
+            elif path == "expanded":
+                entry["expanded"] = int(entry["expanded"]) + 1
+                if is_prime:
+                    entry["expanded_primes"] = int(entry["expanded_primes"]) + 1
+                if is_square:
+                    entry["expanded_squares"] = int(entry["expanded_squares"]) + 1
+                if export_handle is not None:
+                    export_handle.write(
+                        json.dumps(
+                            {
+                                "n": n_value,
+                                "identity": identity.name,
+                                "path": path,
+                                "t_used": t_used,
+                                "window_used": window_used,
+                                "is_prime": is_prime,
+                                "is_square": is_square,
+                                "proc_heuristic": proc_heuristic,
+                            },
+                            sort_keys=True,
+                        )
+                        + "\n"
+                    )
+            else:
+                entry["solver_fallback"] = int(entry["solver_fallback"]) + 1
+
+            entry["max_t_used"] = max(int(entry["max_t_used"]), t_used)
+            entry["max_window_used"] = max(int(entry["max_window_used"]), window_used)
+            cast_values = entry["t_values"]
+            assert isinstance(cast_values, list)
+            cast_values.append(t_used)
+    finally:
+        if export_handle is not None:
+            export_handle.close()
 
     rows: list[dict[str, float | int]] = []
     for bin_start in sorted(bins):

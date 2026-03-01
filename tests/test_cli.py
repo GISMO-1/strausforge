@@ -378,6 +378,130 @@ def test_hardness_prime_or_square_heuristic_reduces_expanded_rate(tmp_path: Path
     assert posw_rate <= off_rate
 
 
+def test_hardness_export_expanded_stream_contains_only_expanded_rows(tmp_path: Path) -> None:
+    out_file = tmp_path / "hardness.csv"
+    expanded_file = tmp_path / "expanded.jsonl"
+    result = runner.invoke(
+        app,
+        [
+            "hardness",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "35000",
+            "--n-max",
+            "36000",
+            "--bin-size",
+            "500",
+            "--only-proc",
+            "--proc-heuristic",
+            "off",
+            "--out",
+            str(out_file),
+            "--export-expanded",
+            str(expanded_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert expanded_file.exists()
+
+    rows = [
+        json.loads(line)
+        for line in expanded_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert rows
+    required_keys = {
+        "n",
+        "identity",
+        "path",
+        "t_used",
+        "window_used",
+        "is_prime",
+        "is_square",
+        "proc_heuristic",
+    }
+
+    for row in rows:
+        assert set(row.keys()) == required_keys
+        assert row["path"] == "expanded"
+        assert row["proc_heuristic"] == "off"
+
+
+def test_hardness_export_expanded_count_matches_bin_totals(tmp_path: Path) -> None:
+    out_file = tmp_path / "hardness.csv"
+    expanded_file = tmp_path / "expanded.jsonl"
+    result = runner.invoke(
+        app,
+        [
+            "hardness",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "35000",
+            "--n-max",
+            "36000",
+            "--bin-size",
+            "500",
+            "--only-proc",
+            "--proc-heuristic",
+            "off",
+            "--out",
+            str(out_file),
+            "--export-expanded",
+            str(expanded_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    with out_file.open("r", encoding="utf-8", newline="") as handle:
+        hardness_rows = list(DictReader(handle))
+    expanded_lines = [
+        line for line in expanded_file.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+
+    expanded_total = sum(int(row["expanded"]) for row in hardness_rows)
+    assert len(expanded_lines) == expanded_total
+
+
+def test_hardness_export_expanded_is_deterministic_across_runs(tmp_path: Path) -> None:
+    out_file_a = tmp_path / "hardness_a.csv"
+    out_file_b = tmp_path / "hardness_b.csv"
+    expanded_file_a = tmp_path / "expanded_a.jsonl"
+    expanded_file_b = tmp_path / "expanded_b.jsonl"
+
+    args = [
+        "hardness",
+        "--identity",
+        "data/identities.jsonl",
+        "--n-min",
+        "35000",
+        "--n-max",
+        "36000",
+        "--bin-size",
+        "500",
+        "--only-proc",
+        "--proc-heuristic",
+        "off",
+    ]
+    result_a = runner.invoke(
+        app,
+        args + ["--out", str(out_file_a), "--export-expanded", str(expanded_file_a)],
+    )
+    result_b = runner.invoke(
+        app,
+        args + ["--out", str(out_file_b), "--export-expanded", str(expanded_file_b)],
+    )
+
+    assert result_a.exit_code == 0
+    assert result_b.exit_code == 0
+    assert expanded_file_a.read_text(encoding="utf-8") == expanded_file_b.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_profile_proc_heuristic_prime_window_reduces_expanded_count() -> None:
     common = [
         "profile",
