@@ -293,7 +293,8 @@ def test_hardness_exports_csv_with_expected_columns(tmp_path: Path) -> None:
         "bin_end",
         "total",
         "fast",
-        "expanded",
+        "escalated",
+        "expanded_exported",
         "solver_fallback",
         "expanded_rate",
         "prime_total",
@@ -309,9 +310,11 @@ def test_hardness_exports_csv_with_expected_columns(tmp_path: Path) -> None:
     for row in rows:
         total = int(row["total"])
         fast = int(row["fast"])
-        expanded = int(row["expanded"])
+        escalated = int(row["escalated"])
+        expanded_exported = int(row["expanded_exported"])
         solver_fallback = int(row["solver_fallback"])
-        assert total == fast + expanded + solver_fallback
+        assert total == fast + escalated + solver_fallback
+        assert expanded_exported <= escalated
 
 
 def test_hardness_prime_or_square_heuristic_reduces_expanded_rate(tmp_path: Path) -> None:
@@ -366,15 +369,15 @@ def test_hardness_prime_or_square_heuristic_reduces_expanded_rate(tmp_path: Path
         posw_rows = list(DictReader(handle))
 
     assert len(off_rows) == len(posw_rows)
-    off_expanded = sum(int(row["expanded"]) for row in off_rows)
-    posw_expanded = sum(int(row["expanded"]) for row in posw_rows)
-    assert off_expanded > 0
-    assert posw_expanded <= off_expanded
+    off_escalated = sum(int(row["escalated"]) for row in off_rows)
+    posw_escalated = sum(int(row["escalated"]) for row in posw_rows)
+    assert off_escalated > 0
+    assert posw_escalated <= off_escalated
 
     off_total = sum(int(row["total"]) for row in off_rows)
     posw_total = sum(int(row["total"]) for row in posw_rows)
-    off_rate = off_expanded / off_total
-    posw_rate = posw_expanded / posw_total
+    off_rate = off_escalated / off_total
+    posw_rate = posw_escalated / posw_total
     assert posw_rate <= off_rate
 
 
@@ -462,9 +465,47 @@ def test_hardness_export_expanded_count_matches_bin_totals(tmp_path: Path) -> No
         line for line in expanded_file.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
-    expanded_total = sum(int(row["expanded"]) for row in hardness_rows)
-    assert len(expanded_lines) == expanded_total
+    expanded_exported_total = sum(int(row["expanded_exported"]) for row in hardness_rows)
+    assert len(expanded_lines) == expanded_exported_total
 
+
+
+
+def test_hardness_export_expanded_reports_empty_file_when_no_records(tmp_path: Path) -> None:
+    out_file = tmp_path / "hardness.csv"
+    expanded_file = tmp_path / "expanded.jsonl"
+    result = runner.invoke(
+        app,
+        [
+            "hardness",
+            "--identity",
+            "data/identities.jsonl",
+            "--n-min",
+            "2",
+            "--n-max",
+            "5000",
+            "--bin-size",
+            "500",
+            "--only-proc",
+            "--proc-heuristic",
+            "prime-or-square-window",
+            "--out",
+            str(out_file),
+            "--export-expanded",
+            str(expanded_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert expanded_file.exists()
+    assert expanded_file.stat().st_size == 0
+    assert "export-expanded: 0 records emitted (file empty)" in result.stdout
+
+    with out_file.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(DictReader(handle))
+
+    assert rows
+    assert sum(int(row["expanded_exported"]) for row in rows) == 0
 
 def test_hardness_export_expanded_is_deterministic_across_runs(tmp_path: Path) -> None:
     out_file_a = tmp_path / "hardness_a.csv"

@@ -27,7 +27,8 @@ HARDNESS_COLUMNS = [
     "bin_end",
     "total",
     "fast",
-    "expanded",
+    "escalated",
+    "expanded_exported",
     "solver_fallback",
     "expanded_rate",
     "prime_total",
@@ -180,7 +181,8 @@ def run_hardness(
                     "bin_end": bin_end,
                     "total": 0,
                     "fast": 0,
-                    "expanded": 0,
+                    "escalated": 0,
+                    "expanded_exported": 0,
                     "solver_fallback": 0,
                     "prime_total": 0,
                     "square_total": 0,
@@ -212,7 +214,7 @@ def run_hardness(
             if path == "fast":
                 entry["fast"] = int(entry["fast"]) + 1
             elif path == "expanded":
-                entry["expanded"] = int(entry["expanded"]) + 1
+                entry["escalated"] = int(entry["escalated"]) + 1
                 if is_prime:
                     entry["expanded_primes"] = int(entry["expanded_primes"]) + 1
                 if is_square:
@@ -234,6 +236,7 @@ def run_hardness(
                         )
                         + "\n"
                     )
+                    entry["expanded_exported"] = int(entry["expanded_exported"]) + 1
             else:
                 entry["solver_fallback"] = int(entry["solver_fallback"]) + 1
 
@@ -250,7 +253,7 @@ def run_hardness(
     for bin_start in sorted(bins):
         entry = bins[bin_start]
         total = int(entry["total"])
-        expanded = int(entry["expanded"])
+        escalated = int(entry["escalated"])
         t_values = entry["t_values"]
         assert isinstance(t_values, list)
         rows.append(
@@ -259,9 +262,10 @@ def run_hardness(
                 "bin_end": int(entry["bin_end"]),
                 "total": total,
                 "fast": int(entry["fast"]),
-                "expanded": expanded,
+                "escalated": escalated,
+                "expanded_exported": int(entry["expanded_exported"]),
                 "solver_fallback": int(entry["solver_fallback"]),
-                "expanded_rate": (float(expanded) / float(total)) if total > 0 else 0.0,
+                "expanded_rate": (float(escalated) / float(total)) if total > 0 else 0.0,
                 "prime_total": int(entry["prime_total"]),
                 "square_total": int(entry["square_total"]),
                 "expanded_primes": int(entry["expanded_primes"]),
@@ -272,12 +276,14 @@ def run_hardness(
             }
         )
 
-    expanded_total = sum(int(row["expanded"]) for row in rows)
+    expanded_total = sum(int(row["escalated"]) for row in rows)
+    expanded_exported_total = sum(int(row["expanded_exported"]) for row in rows)
     matched_total = sum(int(row["total"]) for row in rows)
     summary: dict[str, float | int] = {
         "bins": len(rows),
         "matched_total": matched_total,
         "expanded_total": expanded_total,
+        "expanded_exported_total": expanded_exported_total,
         "expanded_rate": (float(expanded_total) / float(matched_total)) if matched_total else 0.0,
     }
     return rows, summary
@@ -378,7 +384,7 @@ def write_hardness_plot(rows: list[dict[str, float | int]], out_path: Path) -> N
     ]
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(x_values, expanded_rate, marker="o", label="expanded/total")
+    ax.plot(x_values, expanded_rate, marker="o", label="escalated/total")
     ax.plot(x_values, expanded_squares_rate, marker="x", label="expanded_squares/total")
     ax.set_xlabel("bin_start")
     ax.set_ylabel("rate")

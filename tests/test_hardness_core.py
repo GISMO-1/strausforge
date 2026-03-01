@@ -36,7 +36,8 @@ def test_run_hardness_matches_cli_like_expectations(tmp_path: Path) -> None:
     expanded_lines = [
         line for line in expanded_path.read_text(encoding="utf-8").splitlines() if line
     ]
-    assert len(expanded_lines) == int(summary["expanded_total"])
+    assert len(expanded_lines) == int(summary["expanded_exported_total"])
+    assert int(summary["expanded_exported_total"]) <= int(summary["expanded_total"])
 
 
 def test_run_hardness_is_deterministic_for_csv_and_jsonl(tmp_path: Path) -> None:
