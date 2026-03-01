@@ -4,6 +4,7 @@
 ![Results](https://img.shields.io/badge/results-reproducible-brightgreen)
 ![Range](https://img.shields.io/badge/tested%20range-n%20≥%2022M%20(spot%20windows)-orange)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18800225.svg)](https://doi.org/10.5281/zenodo.18800225)
+![Interface](https://img.shields.io/badge/interface-CLI%20%7C%20Streamlit-blueviolet)
 
 # strausforge
 
