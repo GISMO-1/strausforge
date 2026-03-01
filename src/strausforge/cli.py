@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import subprocess
 import sys
 from collections import defaultdict
@@ -19,21 +18,21 @@ from .cert import Certificate, from_jsonl, make_certificate, to_jsonl
 from .coverage import coverage_report
 from .erdos_straus import check_identity, find_solution, find_solution_fast
 from .fit import fit_identities
-from .identities import (
-    Identity,
-    _eval_procedural_identity,
-    eval_identity,
-    identity_applies,
-    identity_from_jsonl,
-    profile_identities,
-    verify_identity,
+from .hardness_core import (
+    HARDNESS_COLUMNS,
+    PROC_HEURISTIC_CHOICES,
+    format_expanded_stats_report,
+    load_identities,
+    run_hardness,
+    summarize_expanded_jsonl,
+    write_hardness_plot,
 )
+from .identities import eval_identity, identity_applies, profile_identities, verify_identity
 from .loop import run_loop
 from .mine import mine_identities
 
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
-_PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window"}
 
 
 class _ProgressPrinter:
@@ -106,94 +105,6 @@ def gui_cmd(
     completed = subprocess.run(command, check=False)
     if completed.returncode != 0:
         raise typer.Exit(code=completed.returncode)
-
-
-def _is_prime_deterministic(n_value: int) -> bool:
-    """Return whether ``n_value`` is prime via deterministic trial division."""
-    if n_value <= 1:
-        return False
-    if n_value <= 3:
-        return True
-    if n_value % 2 == 0 or n_value % 3 == 0:
-        return False
-
-    divisor = 5
-    while divisor * divisor <= n_value:
-        if n_value % divisor == 0 or n_value % (divisor + 2) == 0:
-            return False
-        divisor += 6
-    return True
-
-
-def _is_square_value(n_value: int) -> bool:
-    """Return whether ``n_value`` is a perfect square."""
-    if n_value < 0:
-        return False
-    root = math.isqrt(n_value)
-    return root * root == n_value
-
-
-def _percentile_95(values: list[int]) -> int:
-    """Return deterministic ceil-index p95 for ``values``; return 0 for empty input."""
-    if not values:
-        return 0
-    ordered = sorted(values)
-    index = (95 * len(ordered) + 99) // 100 - 1
-    return ordered[max(0, min(index, len(ordered) - 1))]
-
-
-def _first_matching_identity(
-    identities: list[Identity],
-    n_value: int,
-    proc_heuristic: str,
-) -> tuple[Identity, tuple[int, int, int], str, int, int] | None:
-    """Return first successful identity evaluation for ``n_value`` with diagnostics."""
-    for identity in identities:
-        if not identity_applies(identity, n_value):
-            continue
-        if identity.kind == "procedural":
-            triple, path, window_used, t_used = _eval_procedural_identity(
-                identity,
-                n_value,
-                proc_heuristic=proc_heuristic,
-            )
-            return identity, triple, path, window_used, t_used
-
-        triple = eval_identity(identity, n_value, proc_heuristic=proc_heuristic)
-        if triple is None:
-            continue
-        return identity, triple, "fast", 0, 0
-
-    return None
-
-
-def _write_hardness_plot(rows: list[dict[str, float | int]], out_path: Path) -> None:
-    """Write hardness rate plot PNG using matplotlib."""
-    try:
-        import matplotlib.pyplot as plt
-    except ModuleNotFoundError as error:
-        raise typer.BadParameter(
-            "matplotlib is required for --plot; install it and rerun."
-        ) from error
-
-    x_values = [int(row["bin_start"]) for row in rows]
-    expanded_rate = [float(row["expanded_rate"]) for row in rows]
-    expanded_squares_rate = [
-        (float(row["expanded_squares"]) / float(row["total"])) if int(row["total"]) > 0 else 0.0
-        for row in rows
-    ]
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-    ax.plot(x_values, expanded_rate, marker="o", label="expanded/total")
-    ax.plot(x_values, expanded_squares_rate, marker="x", label="expanded_squares/total")
-    ax.set_xlabel("bin_start")
-    ax.set_ylabel("rate")
-    ax.set_title("Identity hardness distribution")
-    ax.legend()
-    fig.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path)
-    plt.close(fig)
 
 
 @app.command()
@@ -380,14 +291,13 @@ def id_check_cmd(
         strausforge id-check --identity data/identities.jsonl --n 994009 \
             --proc-heuristic prime-or-square-window
     """
-    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
+    if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
             "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
         )
 
-    for identity in _load_identities(identity_file):
-        applies = identity_applies(identity, n)
-        if not applies:
+    for identity in load_identities(identity_file):
+        if not identity_applies(identity, n):
             continue
 
         triple = eval_identity(identity, n, proc_heuristic=proc_heuristic)
@@ -428,12 +338,12 @@ def id_verify_cmd(
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
-    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
+    if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
             "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
         )
 
-    for identity in _load_identities(identity_file):
+    for identity in load_identities(identity_file):
         stats = verify_identity(identity, n_min=n_min, n_max=n_max, proc_heuristic=proc_heuristic)
         console.print(
             f"identity={identity.name}, tested={stats['tested']}, "
@@ -472,12 +382,12 @@ def profile_cmd(
         raise typer.BadParameter("Expected --n-min <= --n-max.")
     if top <= 0:
         raise typer.BadParameter("Expected --top > 0.")
-    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
+    if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
             "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
         )
 
-    identities = _load_identities(identity_file)
+    identities = load_identities(identity_file)
     progress_printer = _ProgressPrinter(
         enabled=progress,
         total=len(identities) * (n_max - n_min + 1),
@@ -567,164 +477,42 @@ def hardness_cmd(
         strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000 \
             --export-expanded expanded.jsonl
     """
-    if n_min > n_max:
-        raise typer.BadParameter("Expected --n-min <= --n-max.")
-    if bin_size <= 0:
-        raise typer.BadParameter("Expected --bin-size > 0.")
-    if proc_heuristic not in _PROC_HEURISTIC_CHOICES:
-        raise typer.BadParameter(
-            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
-        )
-
-    identities = _load_identities(identity_file)
-    if only_proc:
-        identities = [
-            identity
-            for identity in identities
-            if identity.kind == "procedural" and identity.name.startswith("fit_proc_")
-        ]
-
-    columns = [
-        "bin_start",
-        "bin_end",
-        "total",
-        "fast",
-        "expanded",
-        "solver_fallback",
-        "expanded_rate",
-        "prime_total",
-        "square_total",
-        "expanded_primes",
-        "expanded_squares",
-        "max_t_used",
-        "p95_t_used",
-        "max_window_used",
-    ]
-
-    bins: dict[int, dict[str, object]] = {}
+    identities = load_identities(identity_file)
     progress_printer = _ProgressPrinter(
         enabled=progress,
         total=n_max - n_min + 1,
         label="hardness",
     )
-    export_handle = None
+
+    def _on_progress(completed: int, total: int) -> None:
+        del total
+        progress_printer.update(completed)
+
     try:
-        if export_expanded is not None:
-            export_expanded.parent.mkdir(parents=True, exist_ok=True)
-            export_handle = export_expanded.open("w", encoding="utf-8")
-
-        for n_value in range(n_min, n_max + 1):
-            progress_printer.update(n_value - n_min + 1)
-            bin_start = ((n_value - n_min) // bin_size) * bin_size + n_min
-            bin_end = min(bin_start + bin_size - 1, n_max)
-            if bin_start not in bins:
-                bins[bin_start] = {
-                    "bin_start": bin_start,
-                    "bin_end": bin_end,
-                    "total": 0,
-                    "fast": 0,
-                    "expanded": 0,
-                    "solver_fallback": 0,
-                    "prime_total": 0,
-                    "square_total": 0,
-                    "expanded_primes": 0,
-                    "expanded_squares": 0,
-                    "max_t_used": 0,
-                    "max_window_used": 0,
-                    "t_values": [],
-                }
-
-            entry = bins[bin_start]
-            is_prime = _is_prime_deterministic(n_value)
-            is_square = _is_square_value(n_value)
-            if is_prime:
-                entry["prime_total"] = int(entry["prime_total"]) + 1
-            if is_square:
-                entry["square_total"] = int(entry["square_total"]) + 1
-
-            matched = _first_matching_identity(
-                identities=identities,
-                n_value=n_value,
-                proc_heuristic=proc_heuristic,
-            )
-            if matched is None:
-                continue
-
-            identity, _, path, window_used, t_used = matched
-            entry["total"] = int(entry["total"]) + 1
-            if path == "fast":
-                entry["fast"] = int(entry["fast"]) + 1
-            elif path == "expanded":
-                entry["expanded"] = int(entry["expanded"]) + 1
-                if is_prime:
-                    entry["expanded_primes"] = int(entry["expanded_primes"]) + 1
-                if is_square:
-                    entry["expanded_squares"] = int(entry["expanded_squares"]) + 1
-                if export_handle is not None:
-                    export_handle.write(
-                        json.dumps(
-                            {
-                                "n": n_value,
-                                "identity": identity.name,
-                                "path": path,
-                                "t_used": t_used,
-                                "window_used": window_used,
-                                "is_prime": is_prime,
-                                "is_square": is_square,
-                                "proc_heuristic": proc_heuristic,
-                            },
-                            sort_keys=True,
-                        )
-                        + "\n"
-                    )
-            else:
-                entry["solver_fallback"] = int(entry["solver_fallback"]) + 1
-
-            entry["max_t_used"] = max(int(entry["max_t_used"]), t_used)
-            entry["max_window_used"] = max(int(entry["max_window_used"]), window_used)
-            cast_values = entry["t_values"]
-            assert isinstance(cast_values, list)
-            cast_values.append(t_used)
-    finally:
-        if export_handle is not None:
-            export_handle.close()
-
-    rows: list[dict[str, float | int]] = []
-    for bin_start in sorted(bins):
-        entry = bins[bin_start]
-        total = int(entry["total"])
-        expanded = int(entry["expanded"])
-        t_values = entry["t_values"]
-        assert isinstance(t_values, list)
-        row: dict[str, float | int] = {
-            "bin_start": int(entry["bin_start"]),
-            "bin_end": int(entry["bin_end"]),
-            "total": total,
-            "fast": int(entry["fast"]),
-            "expanded": expanded,
-            "solver_fallback": int(entry["solver_fallback"]),
-            "expanded_rate": (float(expanded) / float(total)) if total > 0 else 0.0,
-            "prime_total": int(entry["prime_total"]),
-            "square_total": int(entry["square_total"]),
-            "expanded_primes": int(entry["expanded_primes"]),
-            "expanded_squares": int(entry["expanded_squares"]),
-            "max_t_used": int(entry["max_t_used"]),
-            "p95_t_used": _percentile_95([int(item) for item in t_values]),
-            "max_window_used": int(entry["max_window_used"]),
-        }
-        rows.append(row)
+        rows, summary = run_hardness(
+            identities=identities,
+            n_min=n_min,
+            n_max=n_max,
+            bin_size=bin_size,
+            proc_heuristic=proc_heuristic,
+            only_proc=only_proc,
+            export_expanded=export_expanded,
+            progress_callback=_on_progress if progress else None,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
 
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8", newline="") as handle:
-        writer = DictWriter(handle, fieldnames=columns)
+        writer = DictWriter(handle, fieldnames=HARDNESS_COLUMNS)
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
 
     if plot is not None:
-        _write_hardness_plot(rows, plot)
+        write_hardness_plot(rows, plot)
 
-    console.print(f"summary: bins={len(rows)}, out={out}")
+    console.print(f"summary: bins={summary['bins']}, out={out}")
 
 
 @app.command("expanded-stats")
@@ -745,47 +533,9 @@ def expanded_stats_cmd(
     if top <= 0:
         raise typer.BadParameter("Expected --top > 0.")
 
-    total = 0
-    prime_count = 0
-    square_count = 0
-    residue_counts: dict[int, int] = defaultdict(int)
-    identity_counts: dict[str, int] = defaultdict(int)
+    summary = summarize_expanded_jsonl(path=in_file, mod=modulus, top=top)
 
-    with in_file.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            payload = json.loads(stripped)
-            n_value = int(payload["n"])
-            identity_name = str(payload["identity"])
-            is_prime = bool(payload["is_prime"])
-            is_square = bool(payload["is_square"])
-
-            total += 1
-            if is_prime:
-                prime_count += 1
-            if is_square:
-                square_count += 1
-            residue_counts[n_value % modulus] += 1
-            identity_counts[identity_name] += 1
-
-    lines: list[str] = [
-        f"total_expanded_records: {total}",
-        (f"is_prime: {prime_count} ({((100.0 * prime_count / total) if total else 0.0):.2f}%)"),
-        (f"is_square: {square_count} ({((100.0 * square_count / total) if total else 0.0):.2f}%)"),
-        f"residue_histogram_mod_{modulus}:",
-    ]
-
-    for residue in sorted(residue_counts):
-        lines.append(f"  residue={residue}: count={residue_counts[residue]}")
-
-    lines.append(f"top_identities (top={top}):")
-    sorted_identities = sorted(identity_counts.items(), key=lambda item: (-item[1], item[0]))[:top]
-    for identity_name, count in sorted_identities:
-        lines.append(f"  identity={identity_name}: count={count}")
-
-    report_text = "\n".join(lines)
+    report_text = format_expanded_stats_report(summary)
     if out_file is None:
         console.print(report_text)
         return
@@ -819,7 +569,7 @@ def id_targets_cmd(
         strausforge id-targets --identity data/identities.jsonl --modulus 24
         strausforge id-targets --identity data/identities.jsonl --modulus 24 --json
     """
-    report = coverage_report(_load_identities(identity_file), modulus=modulus)
+    report = coverage_report(load_identities(identity_file), modulus=modulus)
     if json_output:
         console.print(json.dumps(report, sort_keys=True))
         return
@@ -949,7 +699,7 @@ def loop_cmd(
         strausforge loop --identity data/identities.jsonl --modulus 48 \
             --max-targets 12 --max-per-target 400 --target-timeout-seconds 15
     """
-    existing = _load_identities(identity_file)
+    existing = load_identities(identity_file)
     before = coverage_report(existing, modulus=modulus)
     console.print(
         f"before: covered={before['covered_count']}/{before['total_residues']} "
@@ -1018,17 +768,6 @@ def _load_certs(path: Path) -> list[Certificate]:
                 continue
             certs.append(from_jsonl(stripped))
     return certs
-
-
-def _load_identities(path: Path) -> list[Identity]:
-    identities: list[Identity] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            identities.append(identity_from_jsonl(stripped))
-    return identities
 
 
 def _print_single(n: int, json_output: bool) -> None:

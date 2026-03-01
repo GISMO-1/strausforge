@@ -92,6 +92,8 @@ Optional identity preload path:
 strausforge gui --identity data/identities.jsonl
 ```
 
+GUI Hardness now mirrors the CLI v0.2 pipeline, including `--only-proc`, expanded-case JSONL export, plot output, deterministic progress reporting, and an in-GUI **Expanded Stats** panel equivalent to `strausforge expanded-stats`.
+
 ---
 
 ## CI / test notes
