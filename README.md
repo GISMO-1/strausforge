@@ -154,6 +154,29 @@ separate profiling scans. `--expanded-factor-bound` controls the SPF trial-divis
 
 ---
 
+
+## Window reporting pipeline
+
+Recommended modern workflow for semiprime enrichment stats:
+
+1. Run `strausforge hardness` with `--export-expanded-meta expanded_meta.jsonl`.
+2. Run `tools/window_report_meta.ps1` directly on the expanded meta JSONL.
+3. Optionally run `tools/analyze_witnesses.py` for deeper witness-level analysis.
+
+Example:
+
+```powershell
+pwsh tools/window_report_meta.ps1 `
+  -NMin 28000001 `
+  -NMax 30000000 `
+  -MetaJsonl .\expanded_off_meta_28M_30M.jsonl `
+  -Step 97
+```
+
+The legacy CSV-based `tools/window_report.ps1` remains supported. Witness CSV generation is now optional for high-level expanded/baseline semiprime reporting.
+
+---
+
 ## Identity mining
 
 Mine identities from certified solutions:

@@ -1,13 +1,33 @@
 #!/usr/bin/env python3
-"""
-Deterministic sampling of semiprime rate in a range.
-Samples every k-th integer and measures semiprime frequency
-restricted to residues 1 and 25 mod 48.
+"""Deterministic semiprime-rate sampling over configurable mod-48 residues.
+
+Examples:
+    python tools/sample_semiprime_rate.py --n-min 2 --n-max 100000 --step 97
+    python tools/sample_semiprime_rate.py --n-min 2 --n-max 100000 --step 97 --residues 1,25
 """
 
 import argparse
 import math
-from typing import Dict, List
+from typing import Dict, List, Sequence
+
+
+def parse_residues(raw: str) -> List[int]:
+    """Parse a comma-separated residue list.
+
+    Args:
+        raw: Comma-separated list, e.g. ``"1,25"``.
+
+    Returns:
+        Normalized integer residues in ``[0, 47]`` preserving order.
+
+    Raises:
+        ValueError: If no residues are provided.
+    """
+
+    items = [part.strip() for part in raw.split(",") if part.strip()]
+    if not items:
+        raise ValueError("At least one residue is required")
+    return [int(value) % 48 for value in items]
 
 
 def sieve_primes(limit: int) -> List[int]:
@@ -42,12 +62,19 @@ def omega_total(fac: Dict[int, int]) -> int:
     return sum(fac.values())
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-min", type=int, required=True)
     ap.add_argument("--n-max", type=int, required=True)
     ap.add_argument("--step", type=int, default=1000)
+    ap.add_argument(
+        "--residues",
+        type=str,
+        default="1,25",
+        help="Comma-separated mod-48 residues to sample (default: 1,25)",
+    )
     args = ap.parse_args()
+    residues: Sequence[int] = tuple(parse_residues(args.residues))
 
     limit = int(math.isqrt(args.n_max)) + 1
     primes = sieve_primes(limit)
@@ -56,7 +83,7 @@ def main():
     semiprime = 0
 
     for n in range(args.n_min, args.n_max + 1, args.step):
-        if n % 48 not in (1, 25):
+        if n % 48 not in residues:
             continue
         total += 1
         fac = factorize(n, primes)
