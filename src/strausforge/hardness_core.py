@@ -20,6 +20,12 @@ from .identities import (
     identity_applies,
     identity_from_jsonl,
 )
+from .factor_meta import (
+    is_prime_trial,
+    semiprime_kind_from_spf,
+    smallest_prime_factor_bounded,
+    write_jsonl_record,
+)
 
 PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window"}
 HARDNESS_COLUMNS = [
@@ -58,23 +64,6 @@ def load_identities(path: Path) -> list[Identity]:
                 continue
             identities.append(identity_from_jsonl(stripped))
     return identities
-
-
-def is_prime_deterministic(n_value: int) -> bool:
-    """Return whether ``n_value`` is prime via deterministic trial division."""
-    if n_value <= 1:
-        return False
-    if n_value <= 3:
-        return True
-    if n_value % 2 == 0 or n_value % 3 == 0:
-        return False
-
-    divisor = 5
-    while divisor * divisor <= n_value:
-        if n_value % divisor == 0 or n_value % (divisor + 2) == 0:
-            return False
-        divisor += 6
-    return True
 
 
 def is_square_value(n_value: int) -> bool:
@@ -128,6 +117,8 @@ def run_hardness(
     proc_heuristic: str,
     only_proc: bool = False,
     export_expanded: Path | None = None,
+    export_expanded_meta: Path | None = None,
+    expanded_factor_bound: int = 20000,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[list[dict[str, float | int]], dict[str, float | int]]:
     """Run deterministic hardness profiling and optional expanded-case export.
@@ -152,6 +143,8 @@ def run_hardness(
         raise ValueError(
             "Expected proc_heuristic to be one of off, prime-window, prime-or-square-window."
         )
+    if expanded_factor_bound <= 0:
+        raise ValueError("Expected expanded_factor_bound > 0.")
 
     selected_identities = identities
     if only_proc:
@@ -164,10 +157,14 @@ def run_hardness(
     bins: dict[int, dict[str, object]] = {}
     total_steps = n_max - n_min + 1
     export_handle = None
+    export_meta_handle = None
     try:
         if export_expanded is not None:
             export_expanded.parent.mkdir(parents=True, exist_ok=True)
             export_handle = export_expanded.open("w", encoding="utf-8")
+        if export_expanded_meta is not None:
+            export_expanded_meta.parent.mkdir(parents=True, exist_ok=True)
+            export_meta_handle = export_expanded_meta.open("w", encoding="utf-8")
 
         for step, n_value in enumerate(range(n_min, n_max + 1), start=1):
             if progress_callback is not None:
@@ -194,7 +191,7 @@ def run_hardness(
                 }
 
             entry = bins[bin_start]
-            is_prime = is_prime_deterministic(n_value)
+            is_prime = is_prime_trial(n_value)
             is_square = is_square_value(n_value)
             if is_prime:
                 entry["prime_total"] = int(entry["prime_total"]) + 1
@@ -220,23 +217,37 @@ def run_hardness(
                 if is_square:
                     entry["expanded_squares"] = int(entry["expanded_squares"]) + 1
                 if export_handle is not None:
-                    export_handle.write(
-                        json.dumps(
-                            {
-                                "n": n_value,
-                                "identity": identity.name,
-                                "path": path,
-                                "t_used": t_used,
-                                "window_used": window_used,
-                                "is_prime": is_prime,
-                                "is_square": is_square,
-                                "proc_heuristic": proc_heuristic,
-                            },
-                            sort_keys=True,
-                        )
-                        + "\n"
+                    write_jsonl_record(
+                        export_handle,
+                        {
+                            "n": n_value,
+                            "identity": identity.name,
+                            "path": path,
+                            "t_used": t_used,
+                            "window_used": window_used,
+                            "is_prime": is_prime,
+                            "is_square": is_square,
+                            "proc_heuristic": proc_heuristic,
+                        },
                     )
                     entry["expanded_exported"] = int(entry["expanded_exported"]) + 1
+                if export_meta_handle is not None:
+                    spf = smallest_prime_factor_bounded(n_value, expanded_factor_bound)
+                    cofactor, semiprime_kind = semiprime_kind_from_spf(n_value, spf)
+                    write_jsonl_record(
+                        export_meta_handle,
+                        {
+                            "n": n_value,
+                            "res48": n_value % 48,
+                            "identity": identity.name,
+                            "t_used": t_used,
+                            "window_used": window_used,
+                            "proc_heuristic": proc_heuristic,
+                            "spf": spf,
+                            "cofactor": cofactor,
+                            "semiprime_kind": semiprime_kind,
+                        },
+                    )
             else:
                 entry["solver_fallback"] = int(entry["solver_fallback"]) + 1
 
@@ -248,6 +259,8 @@ def run_hardness(
     finally:
         if export_handle is not None:
             export_handle.close()
+        if export_meta_handle is not None:
+            export_meta_handle.close()
 
     rows: list[dict[str, float | int]] = []
     for bin_start in sorted(bins):

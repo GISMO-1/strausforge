@@ -137,7 +137,20 @@ Summarize expanded exports:
 
 ```bash
 strausforge expanded-stats --in expanded.jsonl --mod 48 --top 20
+
+# Export structural tags for expanded cases during hardness evaluation.
+strausforge hardness \
+  --identity data/identities.jsonl \
+  --n-min 2 \
+  --n-max 2000000 \
+  --export-expanded-meta expanded_meta.jsonl \
+  --expanded-factor-bound 20000
 ```
+
+`--export-expanded-meta` attaches bounded factor metadata (`res48`, `spf`, `cofactor`,
+`semiprime_kind`) to expanded cases only, enabling large-range research runs without
+separate profiling scans. `--expanded-factor-bound` controls the SPF trial-divisor bound
+(also capped by `isqrt(n)`).
 
 ---
 
