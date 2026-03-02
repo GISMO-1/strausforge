@@ -464,6 +464,16 @@ def hardness_cmd(
             "expanded_exported=records actually emitted to this JSONL."
         ),
     ),
+    export_expanded_meta: Path | None = typer.Option(
+        None,
+        "--export-expanded-meta",
+        help="Optional JSONL path to export factor/structure metadata for expanded cases.",
+    ),
+    expanded_factor_bound: int = typer.Option(
+        20000,
+        "--expanded-factor-bound",
+        help="Maximum trial divisor bound when finding SPF for expanded metadata.",
+    ),
     progress: bool = typer.Option(
         False,
         "--progress/--no-progress",
@@ -480,6 +490,8 @@ def hardness_cmd(
             --plot hardness.png
         strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000 \
             --export-expanded expanded.jsonl
+        strausforge hardness --identity data/identities.jsonl --n-min 2 --n-max 50000 \
+            --export-expanded-meta expanded_meta.jsonl --expanded-factor-bound 50000
     """
     identities = load_identities(identity_file)
     progress_printer = _ProgressPrinter(
@@ -501,6 +513,8 @@ def hardness_cmd(
             proc_heuristic=proc_heuristic,
             only_proc=only_proc,
             export_expanded=export_expanded,
+            export_expanded_meta=export_expanded_meta,
+            expanded_factor_bound=expanded_factor_bound,
             progress_callback=_on_progress if progress else None,
         )
     except ValueError as error:
