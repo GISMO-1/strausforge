@@ -34,6 +34,16 @@ from .mine import mine_identities
 app = typer.Typer(help="Search/verification tool for the Erdős–Straus conjecture.")
 console = Console()
 
+PROC_HEURISTIC_HELP = (
+    "Procedural heuristic: off, prime-window, prime-or-square-window, "
+    "prime-or-square-or-semiprime-window, or semiprime-window."
+)
+PROC_HEURISTIC_ERROR = (
+    "Expected --proc-heuristic to be one of off, prime-window, "
+    "prime-or-square-window, prime-or-square-or-semiprime-window, semiprime-window."
+)
+
+
 
 class _ProgressPrinter:
     """Low-noise single-line progress printer for long-running CLI loops."""
@@ -279,7 +289,7 @@ def id_check_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
+        help=PROC_HEURISTIC_HELP,
     ),
 ) -> None:
     """Find the first identity that applies to ``n`` and print ``(x, y, z)``.
@@ -293,7 +303,7 @@ def id_check_cmd(
     """
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
-            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window, semiprime-window."
+            PROC_HEURISTIC_ERROR
         )
 
     for identity in load_identities(identity_file):
@@ -324,7 +334,7 @@ def id_verify_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
+        help=PROC_HEURISTIC_HELP,
     ),
 ) -> None:
     """Empirically verify each stored identity over a range.
@@ -340,7 +350,7 @@ def id_verify_cmd(
         raise typer.BadParameter("Expected --n-min <= --n-max.")
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
-            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window, semiprime-window."
+            PROC_HEURISTIC_ERROR
         )
 
     for identity in load_identities(identity_file):
@@ -360,7 +370,7 @@ def profile_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
+        help=PROC_HEURISTIC_HELP,
     ),
     progress: bool = typer.Option(
         False,
@@ -384,7 +394,7 @@ def profile_cmd(
         raise typer.BadParameter("Expected --top > 0.")
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
-            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window, semiprime-window."
+            PROC_HEURISTIC_ERROR
         )
 
     identities = load_identities(identity_file)
@@ -447,7 +457,7 @@ def hardness_cmd(
     proc_heuristic: str = typer.Option(
         "semiprime-window",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
+        help=PROC_HEURISTIC_HELP,
     ),
     only_proc: bool = typer.Option(
         False,

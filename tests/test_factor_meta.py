@@ -96,6 +96,7 @@ def test_run_hardness_exports_expanded_meta_jsonl(tmp_path: Path) -> None:
         "t_used",
         "window_used",
         "proc_heuristic",
+        "proc_stage",
         "semiprime_triggered",
         "spf_bound_used",
         "spf",
@@ -103,6 +104,7 @@ def test_run_hardness_exports_expanded_meta_jsonl(tmp_path: Path) -> None:
         "semiprime_kind",
     }
     assert int(sample["res48"]) == int(sample["n"]) % 48
+    assert str(sample["proc_stage"]) in {"prime", "square", "semiprime", "none"}
     assert isinstance(sample["semiprime_triggered"], bool)
     assert int(sample["spf_bound_used"]) == min(20000, math.isqrt(int(sample["n"])))
 

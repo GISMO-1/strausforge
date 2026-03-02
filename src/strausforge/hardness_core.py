@@ -16,7 +16,7 @@ from typing import Any
 from .factor_meta import (
     is_prime_trial,
     semiprime_kind_from_spf,
-    smallest_prime_factor_bounded,
+    semiprime_window_trigger,
     write_jsonl_record,
 )
 from .identities import (
@@ -27,7 +27,13 @@ from .identities import (
     identity_from_jsonl,
 )
 
-PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window", "semiprime-window"}
+PROC_HEURISTIC_CHOICES = {
+    "off",
+    "prime-window",
+    "prime-or-square-window",
+    "prime-or-square-or-semiprime-window",
+    "semiprime-window",
+}
 HARDNESS_COLUMNS = [
     "bin_start",
     "bin_end",
@@ -144,7 +150,7 @@ def run_hardness(
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise ValueError(
             "Expected proc_heuristic to be one of off, prime-window, "
-            "prime-or-square-window, semiprime-window."
+            "prime-or-square-window, prime-or-square-or-semiprime-window, semiprime-window."
         )
     if expanded_factor_bound <= 0:
         raise ValueError("Expected expanded_factor_bound > 0.")
@@ -236,8 +242,18 @@ def run_hardness(
                     )
                     entry["expanded_exported"] = int(entry["expanded_exported"]) + 1
                 if export_meta_handle is not None:
-                    spf = smallest_prime_factor_bounded(n_value, expanded_factor_bound)
+                    semiprime_triggered, spf, spf_bound_used = semiprime_window_trigger(
+                        n_value,
+                        expanded_factor_bound,
+                    )
                     cofactor, semiprime_kind = semiprime_kind_from_spf(n_value, spf)
+                    proc_stage = "none"
+                    if is_prime:
+                        proc_stage = "prime"
+                    elif is_square:
+                        proc_stage = "square"
+                    elif semiprime_triggered:
+                        proc_stage = "semiprime"
                     write_jsonl_record(
                         export_meta_handle,
                         {
@@ -247,8 +263,9 @@ def run_hardness(
                             "t_used": t_used,
                             "window_used": window_used,
                             "proc_heuristic": proc_heuristic,
-                            "semiprime_triggered": bool(n_value % 48 in {1, 25} and spf > 0),
-                            "spf_bound_used": min(expanded_factor_bound, math.isqrt(n_value)),
+                            "proc_stage": proc_stage,
+                            "semiprime_triggered": semiprime_triggered,
+                            "spf_bound_used": spf_bound_used,
                             "spf": spf,
                             "cofactor": cofactor,
                             "semiprime_kind": semiprime_kind,
