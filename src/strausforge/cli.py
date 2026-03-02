@@ -279,7 +279,7 @@ def id_check_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
+        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
     ),
 ) -> None:
     """Find the first identity that applies to ``n`` and print ``(x, y, z)``.
@@ -289,11 +289,11 @@ def id_check_cmd(
         strausforge id-check --identity data/identities.jsonl --n 35809 \
             --proc-heuristic prime-window
         strausforge id-check --identity data/identities.jsonl --n 994009 \
-            --proc-heuristic prime-or-square-window
+            --proc-heuristic semiprime-window
     """
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
-            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
+            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window, semiprime-window."
         )
 
     for identity in load_identities(identity_file):
@@ -324,7 +324,7 @@ def id_verify_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
+        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
     ),
 ) -> None:
     """Empirically verify each stored identity over a range.
@@ -334,13 +334,13 @@ def id_verify_cmd(
         strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500 \
             --proc-heuristic prime-window
         strausforge id-verify --identity data/identities.jsonl --n-min 2 --n-max 500 \
-            --proc-heuristic prime-or-square-window
+            --proc-heuristic semiprime-window
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
-            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
+            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window, semiprime-window."
         )
 
     for identity in load_identities(identity_file):
@@ -360,7 +360,7 @@ def profile_cmd(
     proc_heuristic: str = typer.Option(
         "off",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
+        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
     ),
     progress: bool = typer.Option(
         False,
@@ -376,7 +376,7 @@ def profile_cmd(
         strausforge profile --identity data/identities.jsonl --n-min 2 --n-max 50000 \
             --proc-heuristic prime-window
         strausforge profile --identity data/identities.jsonl --n-min 994009 --n-max 994009 \
-            --proc-heuristic prime-or-square-window
+            --proc-heuristic semiprime-window
     """
     if n_min > n_max:
         raise typer.BadParameter("Expected --n-min <= --n-max.")
@@ -384,7 +384,7 @@ def profile_cmd(
         raise typer.BadParameter("Expected --top > 0.")
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise typer.BadParameter(
-            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window."
+            "Expected --proc-heuristic to be one of off, prime-window, prime-or-square-window, semiprime-window."
         )
 
     identities = load_identities(identity_file)
@@ -445,9 +445,9 @@ def hardness_cmd(
     bin_size: int = typer.Option(10000, "--bin-size", help="Bin width."),
     out: Path = typer.Option(Path("hardness.csv"), "--out", help="Output CSV path."),
     proc_heuristic: str = typer.Option(
-        "prime-or-square-window",
+        "semiprime-window",
         "--proc-heuristic",
-        help="Procedural heuristic: off, prime-window, or prime-or-square-window.",
+        help="Procedural heuristic: off, prime-window, prime-or-square-window, or semiprime-window.",
     ),
     only_proc: bool = typer.Option(
         False,
@@ -470,7 +470,7 @@ def hardness_cmd(
         help="Optional JSONL path to export factor/structure metadata for expanded cases.",
     ),
     expanded_factor_bound: int = typer.Option(
-        20000,
+        5000,
         "--expanded-factor-bound",
         help="Maximum trial divisor bound when finding SPF for expanded metadata.",
     ),

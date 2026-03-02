@@ -144,13 +144,14 @@ strausforge hardness \
   --n-min 2 \
   --n-max 2000000 \
   --export-expanded-meta expanded_meta.jsonl \
-  --expanded-factor-bound 20000
+  --expanded-factor-bound 5000
 ```
 
 `--export-expanded-meta` attaches bounded factor metadata (`res48`, `spf`, `cofactor`,
-`semiprime_kind`) to expanded cases only, enabling large-range research runs without
-separate profiling scans. `--expanded-factor-bound` controls the SPF trial-divisor bound
-(also capped by `isqrt(n)`).
+`semiprime_kind`, `semiprime_triggered`, `spf_bound_used`) to expanded cases only, enabling
+large-range research runs without separate profiling scans. `--expanded-factor-bound`
+controls the SPF trial-divisor bound (also capped by `isqrt(n)`) and defaults to `5000`,
+which provides full coverage for expanded semiprime witnesses in the observed 22M–23M window.
 
 ---
 
@@ -195,16 +196,17 @@ strausforge mine \
 Example:
 
 ```bash
---proc-heuristic prime-or-square-window
+--proc-heuristic semiprime-window
 ```
 
-Empirically, difficult regions correlate strongly with:
+The `semiprime-window` heuristic captures residual semiprime pressure after the prime-window
+family eliminates most prime expansion. It deterministically triggers only when:
 
-* primes
-* perfect squares
-* near-square arithmetic structure
+* `n % 48` is in `{1, 25}`
+* bounded SPF discovery finds a factor (`spf > 0`)
 
-The heuristic widens evaluation windows precisely where structural pressure is expected.
+When triggered, the initial procedural search window is widened (currently `8 -> 128`) for
+that `n`; otherwise behavior is unchanged.
 
 ---
 
