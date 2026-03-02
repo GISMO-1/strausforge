@@ -125,6 +125,53 @@ def test_prime_or_square_window_heuristic_turns_known_prime_square_into_fast_pat
     assert heuristic_window == 64
 
 
+
+def test_semiprime_window_heuristic_increases_initial_window_for_triggered_semiprime() -> None:
+    identities = _load_identities(Path("data/identities.jsonl"))
+    by_name = {identity.name: identity for identity in identities}
+    identity = by_name["fit_proc_m48_r1"]
+
+    n_value = 22033
+    _, baseline_path, baseline_window, _ = _eval_procedural_identity(
+        identity,
+        n_value,
+        proc_heuristic="off",
+    )
+    _, heuristic_path, heuristic_window, _ = _eval_procedural_identity(
+        identity,
+        n_value,
+        proc_heuristic="semiprime-window",
+        semiprime_factor_bound=5000,
+    )
+
+    assert baseline_path == "fast"
+    assert baseline_window == 8
+    assert heuristic_path == "fast"
+    assert heuristic_window == 128
+
+
+def test_semiprime_window_heuristic_does_not_trigger_for_prime_candidate() -> None:
+    identities = _load_identities(Path("data/identities.jsonl"))
+    by_name = {identity.name: identity for identity in identities}
+    identity = by_name["fit_proc_m48_r1"]
+
+    n_value = 35809
+    _, baseline_path, baseline_window, _ = _eval_procedural_identity(
+        identity,
+        n_value,
+        proc_heuristic="off",
+    )
+    _, heuristic_path, heuristic_window, _ = _eval_procedural_identity(
+        identity,
+        n_value,
+        proc_heuristic="semiprime-window",
+        semiprime_factor_bound=5000,
+    )
+
+    assert baseline_path == "expanded"
+    assert heuristic_path == "expanded"
+    assert baseline_window == heuristic_window == 64
+
 def test_symbolic_expression_cache_preserves_eval_results() -> None:
     identities = _load_identities(Path("data/identities.jsonl"))
     symbolic = next(identity for identity in identities if identity.kind == "symbolic")

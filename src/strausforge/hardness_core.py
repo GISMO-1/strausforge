@@ -13,6 +13,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from .factor_meta import (
+    is_prime_trial,
+    semiprime_kind_from_spf,
+    smallest_prime_factor_bounded,
+    write_jsonl_record,
+)
 from .identities import (
     Identity,
     _eval_procedural_identity,
@@ -20,14 +26,8 @@ from .identities import (
     identity_applies,
     identity_from_jsonl,
 )
-from .factor_meta import (
-    is_prime_trial,
-    semiprime_kind_from_spf,
-    smallest_prime_factor_bounded,
-    write_jsonl_record,
-)
 
-PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window"}
+PROC_HEURISTIC_CHOICES = {"off", "prime-window", "prime-or-square-window", "semiprime-window"}
 HARDNESS_COLUMNS = [
     "bin_start",
     "bin_end",
@@ -87,6 +87,7 @@ def first_matching_identity(
     identities: list[Identity],
     n_value: int,
     proc_heuristic: str,
+    semiprime_factor_bound: int = 5000,
 ) -> tuple[Identity, tuple[int, int, int], str, int, int] | None:
     """Return first successful identity evaluation for ``n_value`` with diagnostics."""
     for identity in identities:
@@ -97,6 +98,7 @@ def first_matching_identity(
                 identity,
                 n_value,
                 proc_heuristic=proc_heuristic,
+                semiprime_factor_bound=semiprime_factor_bound,
             )
             return identity, triple, path, window_used, t_used
 
@@ -118,7 +120,7 @@ def run_hardness(
     only_proc: bool = False,
     export_expanded: Path | None = None,
     export_expanded_meta: Path | None = None,
-    expanded_factor_bound: int = 20000,
+    expanded_factor_bound: int = 5000,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[list[dict[str, float | int]], dict[str, float | int]]:
     """Run deterministic hardness profiling and optional expanded-case export.
@@ -141,7 +143,8 @@ def run_hardness(
         raise ValueError("Expected bin_size > 0.")
     if proc_heuristic not in PROC_HEURISTIC_CHOICES:
         raise ValueError(
-            "Expected proc_heuristic to be one of off, prime-window, prime-or-square-window."
+            "Expected proc_heuristic to be one of off, prime-window, "
+            "prime-or-square-window, semiprime-window."
         )
     if expanded_factor_bound <= 0:
         raise ValueError("Expected expanded_factor_bound > 0.")
@@ -202,6 +205,7 @@ def run_hardness(
                 identities=selected_identities,
                 n_value=n_value,
                 proc_heuristic=proc_heuristic,
+                semiprime_factor_bound=expanded_factor_bound,
             )
             if matched is None:
                 continue
@@ -243,6 +247,8 @@ def run_hardness(
                             "t_used": t_used,
                             "window_used": window_used,
                             "proc_heuristic": proc_heuristic,
+                            "semiprime_triggered": bool(n_value % 48 in {1, 25} and spf > 0),
+                            "spf_bound_used": min(expanded_factor_bound, math.isqrt(n_value)),
                             "spf": spf,
                             "cofactor": cofactor,
                             "semiprime_kind": semiprime_kind,

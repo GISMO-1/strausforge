@@ -41,6 +41,20 @@ def smallest_prime_factor_bounded(n_value: int, bound: int) -> int:
     return 0
 
 
+def semiprime_window_trigger(n_value: int, bound: int) -> tuple[bool, int, int]:
+    """Return trigger decision and SPF diagnostics for semiprime-window gating.
+
+    The trigger is active only on residues ``1`` and ``25`` modulo 48 and only
+    when a bounded SPF is found.
+    """
+    bound_used = min(max(bound, 0), math.isqrt(max(n_value, 0)))
+    if n_value % 48 not in {1, 25}:
+        return False, 0, bound_used
+
+    spf = smallest_prime_factor_bounded(n_value, bound)
+    return spf > 0, spf, bound_used
+
+
 def semiprime_kind_from_spf(n_value: int, spf: int) -> tuple[int, str]:
     """Classify ``n_value`` using its smallest factor.
 

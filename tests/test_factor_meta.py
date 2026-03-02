@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from strausforge.factor_meta import (
     semiprime_kind_from_spf,
+    semiprime_window_trigger,
     smallest_prime_factor_bounded,
     write_jsonl_record,
 )
@@ -15,6 +17,23 @@ def test_smallest_prime_factor_bounded_cases() -> None:
     assert smallest_prime_factor_bounded(101, 200) == 0
     assert smallest_prime_factor_bounded(221, 200) == 13
     assert smallest_prime_factor_bounded(10403, 100) == 0
+
+
+def test_semiprime_window_trigger_behavior() -> None:
+    triggered, spf, bound_used = semiprime_window_trigger(22033, 5000)
+    assert triggered is True
+    assert spf == 11
+    assert bound_used == 148
+
+    other_residue_triggered, other_spf, other_bound = semiprime_window_trigger(22001, 5000)
+    assert other_residue_triggered is False
+    assert other_spf == 0
+    assert other_bound == 148
+
+    prime_triggered, prime_spf, prime_bound = semiprime_window_trigger(35809, 5000)
+    assert prime_triggered is False
+    assert prime_spf == 0
+    assert prime_bound == 189
 
 
 def test_semiprime_classification_cases() -> None:
@@ -51,9 +70,9 @@ def test_run_hardness_exports_expanded_meta_jsonl(tmp_path: Path) -> None:
 
     _rows, summary = run_hardness(
         identities=identities,
-        n_min=35000,
-        n_max=35200,
-        bin_size=100,
+        n_min=250002,
+        n_max=300001,
+        bin_size=50000,
         proc_heuristic="off",
         only_proc=True,
         export_expanded_meta=meta_path,
@@ -77,8 +96,32 @@ def test_run_hardness_exports_expanded_meta_jsonl(tmp_path: Path) -> None:
         "t_used",
         "window_used",
         "proc_heuristic",
+        "semiprime_triggered",
+        "spf_bound_used",
         "spf",
         "cofactor",
         "semiprime_kind",
     }
     assert int(sample["res48"]) == int(sample["n"]) % 48
+    assert isinstance(sample["semiprime_triggered"], bool)
+    assert int(sample["spf_bound_used"]) == min(20000, math.isqrt(int(sample["n"])))
+
+
+def test_run_hardness_meta_includes_true_semiprime_trigger(tmp_path: Path) -> None:
+    identities = load_identities(Path("data/identities.jsonl"))
+    meta_path = tmp_path / "expanded_meta_semiprime.jsonl"
+
+    run_hardness(
+        identities=identities,
+        n_min=250002,
+        n_max=300001,
+        bin_size=50000,
+        proc_heuristic="off",
+        only_proc=True,
+        export_expanded_meta=meta_path,
+        expanded_factor_bound=5000,
+    )
+
+    rows = [json.loads(line) for line in meta_path.read_text(encoding="utf-8").splitlines() if line]
+    assert rows
+    assert any(bool(row["semiprime_triggered"]) for row in rows)

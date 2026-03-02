@@ -13,6 +13,7 @@ from typing import Any
 import sympy
 
 from .erdos_straus import check_identity, find_solution_fast
+from .factor_meta import semiprime_window_trigger
 
 
 @dataclass(slots=True)
@@ -144,6 +145,7 @@ def _eval_procedural_identity(
     identity: Identity,
     n_value: int,
     proc_heuristic: str = "off",
+    semiprime_factor_bound: int = 5000,
 ) -> tuple[tuple[int, int, int], str, int, int]:
     if identity.procedural_params is None:
         raise ValueError(f"Procedural identity {identity.name} has no procedural_params.")
@@ -158,6 +160,9 @@ def _eval_procedural_identity(
     elif proc_heuristic == "prime-or-square-window":
         is_square = _is_square(n_value)
         initial_window = 64 if sympy.isprime(n_value) or is_square else 8
+    elif proc_heuristic == "semiprime-window":
+        triggered, _, _ = semiprime_window_trigger(n_value, semiprime_factor_bound)
+        initial_window = 128 if triggered else 8
     elif proc_heuristic != "off":
         raise ValueError(f"Unknown procedural heuristic: {proc_heuristic}")
     initial_t_max = int(identity.procedural_params.get("t_max", 256))
