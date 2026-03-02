@@ -160,6 +160,14 @@ def _eval_procedural_identity(
     elif proc_heuristic == "prime-or-square-window":
         is_square = _is_square(n_value)
         initial_window = 64 if sympy.isprime(n_value) or is_square else 8
+    elif proc_heuristic == "prime-or-square-or-semiprime-window":
+        is_prime = sympy.isprime(n_value)
+        is_square = _is_square(n_value)
+        if is_prime or is_square:
+            initial_window = 64
+        else:
+            triggered, _, _ = semiprime_window_trigger(n_value, semiprime_factor_bound)
+            initial_window = 128 if triggered else 8
     elif proc_heuristic == "semiprime-window":
         triggered, _, _ = semiprime_window_trigger(n_value, semiprime_factor_bound)
         initial_window = 128 if triggered else 8
