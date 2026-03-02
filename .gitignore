@@ -43,3 +43,9 @@ data/identities_fit*.jsonl
 
 # Allow curated examples under experiments/
 !experiments/**
+
+# Strausforge experimental artifacts
+witnesses_*.csv
+expanded_*.jsonl
+prime_pressure_*.jsonl
+prime_pressure_*.txt
